@@ -6,4 +6,4 @@ Improve `/turnlog-record` for manual recording.
 
 - `/turnlog-record` with args passes through unchanged
 - `/turnlog-record` with no args prompts for a summary
-- empty prompt input cancels with a clear message
+- empty prompt input cancels without throwing an extension error

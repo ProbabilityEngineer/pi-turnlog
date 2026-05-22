@@ -103,12 +103,15 @@ function formatContext(stdout: string): string {
   return [session, turn, dirty ? `${vcs} ${dirty}` : vcs].join("\n");
 }
 
-async function buildRecordArgs(raw: string, ctx: any): Promise<string[]> {
+async function buildRecordArgs(raw: string, ctx: any): Promise<string[] | null> {
   const args = parseArgs(raw);
   if (args.length) return args;
 
   const summary = (await ctx.ui.input("Record turn summary", "what changed?"))?.trim();
-  if (!summary) throw usageError("/turnlog-record cancelled: summary is required");
+  if (!summary) {
+    ctx.ui.notify("turnlog record cancelled", "info");
+    return null;
+  }
   return ["--summary", summary];
 }
 
@@ -186,7 +189,9 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("turnlog-record", {
     description: "Record a turnlog turn",
     handler: async (args, ctx) => {
-      await notifyResult(ctx, "turnlog record", ["record", ...(await buildRecordArgs(args, ctx))]);
+      const recordArgs = await buildRecordArgs(args, ctx);
+      if (!recordArgs) return;
+      await notifyResult(ctx, "turnlog record", ["record", ...recordArgs]);
     },
   });
 
