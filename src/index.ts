@@ -103,11 +103,27 @@ function formatContext(stdout: string): string {
   return [session, turn, dirty ? `${vcs} ${dirty}` : vcs].join("\n");
 }
 
-async function buildRecordArgs(raw: string, ctx: any): Promise<string[] | null> {
+function messageText(message: any): string {
+  const content = message?.content;
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => (typeof part === "string" ? part : part?.text ?? ""))
+      .filter(Boolean)
+      .join(" ");
+  }
+  return "";
+}
+
+function summarizeText(text: string): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+async function buildRecordArgs(raw: string, ctx: any, suggestedSummary?: string): Promise<string[] | null> {
   const args = parseArgs(raw);
   if (args.length) return args;
 
-  const summary = (await ctx.ui.input("Record turn summary", "what changed?"))?.trim();
+  const summary = (await ctx.ui.input("Record turn summary", suggestedSummary || "what changed?"))?.trim();
   if (!summary) {
     ctx.ui.notify("turnlog record cancelled", "info");
     return null;
@@ -117,6 +133,19 @@ async function buildRecordArgs(raw: string, ctx: any): Promise<string[] | null> 
 
 export default function (pi: ExtensionAPI) {
   let footerEnabled = false;
+  let lastAssistantSummary = "";
+
+  pi.on("turn_end", async (event) => {
+    const text = messageText((event as any).message);
+    const summary = summarizeText(text);
+    if (summary) lastAssistantSummary = summary;
+  });
+
+  pi.on("message_end", async (event) => {
+    if ((event as any).message?.role !== "assistant") return;
+    const summary = summarizeText(messageText((event as any).message));
+    if (summary) lastAssistantSummary = summary;
+  });
 
   pi.on("session_start", async (_event, ctx) => {
     if (!footerEnabled) return;
@@ -190,6 +219,15 @@ export default function (pi: ExtensionAPI) {
     description: "Record a turnlog turn",
     handler: async (args, ctx) => {
       const recordArgs = await buildRecordArgs(args, ctx);
+      if (!recordArgs) return;
+      await notifyResult(ctx, "turnlog record", ["record", ...recordArgs]);
+    },
+  });
+
+  pi.registerCommand("turnlog-record-turn", {
+    description: "Record the latest assistant turn with an editable suggested summary",
+    handler: async (args, ctx) => {
+      const recordArgs = await buildRecordArgs(args, ctx, lastAssistantSummary);
       if (!recordArgs) return;
       await notifyResult(ctx, "turnlog record", ["record", ...recordArgs]);
     },

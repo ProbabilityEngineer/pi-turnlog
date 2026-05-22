@@ -5,5 +5,5 @@ Design a helper for recording the current agent turn without fully automatic hoo
 ## Acceptance
 
 - define where summary text comes from
-- avoid recording duplicate turns
 - keep user confirmation/manual control
+- add `/turnlog-record-turn` with an editable suggested summary

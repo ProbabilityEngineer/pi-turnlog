@@ -10,5 +10,5 @@
 - [x] Add status footer toggle
 - [x] Add session/turn auto-context integration
 - [x] Improve record UX
-- [ ] Assisted record current turn
+- [x] Assisted record current turn
 - [ ] Full auto-recording
