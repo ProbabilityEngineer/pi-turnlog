@@ -14,6 +14,7 @@ Copy or symlink the installed package into Pi, then reload Pi.
 
 - `/turnlog-init`
 - `/turnlog-status`
+- `/turnlog-current`
 - `/turnlog-start --goal "..." [--ticket ...]`
 - `/turnlog-record`
 - `/turnlog-show <id>`
@@ -24,4 +25,5 @@ Copy or symlink the installed package into Pi, then reload Pi.
 - quoted arguments are supported
 - `TURNLOG_BIN` overrides the executable path
 - stdout/stderr are surfaced in Pi
+- on session start, Pi shows a concise turnlog status
 - source entrypoint is `src/index.ts`

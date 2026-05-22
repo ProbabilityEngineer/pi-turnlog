@@ -6,4 +6,5 @@
 - [x] Add argument parsing and structured output
 - [x] Add init command and required-arg validation
 - [x] Move extension entrypoint out of `.pi/extensions/`
+- [x] Add current status widget and command
 - [ ] Add session/turn auto-context integration

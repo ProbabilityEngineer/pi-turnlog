@@ -61,13 +61,14 @@ function runTurnlog(args: string[]): Promise<{ code: number; stdout: string; std
   });
 }
 
-async function notifyResult(ctx: Parameters<Parameters<ExtensionAPI["registerCommand"]>[1]["handler"]>[1], label: string, args: string[]) {
+async function notifyResult(ctx: any, label: string, args: string[]) {
   const result = await runTurnlog(args);
   const stdout = result.stdout.trim();
   const stderr = result.stderr.trim();
   if (stdout) ctx.ui.notify(`${label}:\n${stdout}`, "info");
   if (stderr) ctx.ui.notify(`${label} stderr:\n${stderr}`, "warning");
   if (result.code !== 0) throw new Error(`${label} failed with exit code ${result.code}`);
+  return stdout;
 }
 
 function requireOneArg(raw: string, cmd: string): string {
@@ -82,7 +83,26 @@ function requireAtLeastOneArg(raw: string, cmd: string): string[] {
   return args;
 }
 
+function formatCurrentStatus(stdout: string): string {
+  return stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 4)
+    .join(" | ");
+}
+
 export default function (pi: ExtensionAPI) {
+  pi.on("session_start", async (_event, ctx) => {
+    try {
+      const stdout = await notifyResult(ctx, "turnlog status", ["status"]);
+      const summary = formatCurrentStatus(stdout);
+      if (summary) ctx.ui.setStatus("turnlog", summary);
+    } catch {
+      // best effort only
+    }
+  });
+
   pi.registerCommand("turnlog-init", {
     description: "Initialize turnlog storage",
     handler: async (_args, ctx) => {
@@ -94,6 +114,13 @@ export default function (pi: ExtensionAPI) {
     description: "Show turnlog status",
     handler: async (_args, ctx) => {
       await notifyResult(ctx, "turnlog status", ["status"]);
+    },
+  });
+
+  pi.registerCommand("turnlog-current", {
+    description: "Show current turnlog session and last turn",
+    handler: async (_args, ctx) => {
+      await notifyResult(ctx, "turnlog current", ["status"]);
     },
   });
 
