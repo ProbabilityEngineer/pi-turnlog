@@ -1,10 +1,11 @@
 # Full auto-recording
 
-Explore recording every assistant turn automatically.
+Record assistant turns automatically when explicitly enabled.
 
 ## Acceptance
 
-- document lifecycle hook choice
-- document dedupe/error strategy
-- keep disabled by default
-- avoid large context additions
+- lifecycle hook is `turn_end`
+- dedupe uses the Pi turn index where available
+- disabled by default
+- `/turnlog-auto` toggles auto-recording
+- auto-record stores only a short summary, not transcript text or diffs

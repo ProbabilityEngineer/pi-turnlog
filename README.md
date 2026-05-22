@@ -17,6 +17,7 @@ Copy or symlink the installed package into Pi, then reload Pi.
 - `/turnlog-current`
 - `/turnlog-context`
 - `/turnlog-footer`
+- `/turnlog-auto`
 - `/turnlog-start --goal "..." [--ticket ...]`
 - `/turnlog-record [--summary "..."]`
 - `/turnlog-record-turn [--summary "..."]`
@@ -30,5 +31,6 @@ Copy or symlink the installed package into Pi, then reload Pi.
 - `/turnlog-record` prompts for a summary when called without arguments
 - `/turnlog-record-turn` opens an editor with a suggested summary from the latest assistant turn
 - stdout/stderr are surfaced in Pi
-- the status footer is off by default and can be toggled with `/turnlog-toggle`
+- the status footer is off by default and can be toggled with `/turnlog-footer`
+- auto-recording is off by default and can be toggled with `/turnlog-auto`
 - source entrypoint is `src/index.ts`

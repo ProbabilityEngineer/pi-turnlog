@@ -135,12 +135,28 @@ async function buildRecordArgs(raw: string, ctx: any, suggestedSummary?: string)
 
 export default function (pi: ExtensionAPI) {
   let footerEnabled = false;
+  let autoRecordEnabled = false;
   let lastAssistantSummary = "";
+  const recordedTurnKeys = new Set<string>();
 
-  pi.on("turn_end", async (event) => {
+  pi.on("turn_end", async (event, ctx) => {
     const text = messageText((event as any).message);
     const summary = summarizeText(text);
     if (summary) lastAssistantSummary = summary;
+
+    if (!autoRecordEnabled || !summary) return;
+    const turnKey = String((event as any).turnIndex ?? summary);
+    if (recordedTurnKeys.has(turnKey)) return;
+    recordedTurnKeys.add(turnKey);
+
+    const result = await runTurnlog(["record", "--summary", summary]);
+    if (result.code === 0) {
+      const stdout = result.stdout.trim();
+      if (stdout) ctx.ui.notify(`turnlog auto-record:\n${stdout}`, "info");
+    } else {
+      const stderr = result.stderr.trim() || `exit code ${result.code}`;
+      ctx.ui.notify(`turnlog auto-record failed:\n${stderr}`, "warning");
+    }
   });
 
   pi.on("message_end", async (event) => {
@@ -206,6 +222,14 @@ export default function (pi: ExtensionAPI) {
       } else {
         ctx.ui.setStatus("turnlog", "");
       }
+    },
+  });
+
+  pi.registerCommand("turnlog-auto", {
+    description: "Toggle automatic turnlog recording for assistant turns",
+    handler: async (_args, ctx) => {
+      autoRecordEnabled = !autoRecordEnabled;
+      ctx.ui.notify(`turnlog auto-record ${autoRecordEnabled ? "enabled" : "disabled"}`, "info");
     },
   });
 

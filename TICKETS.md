@@ -11,4 +11,4 @@
 - [x] Add session/turn auto-context integration
 - [x] Improve record UX
 - [x] Assisted record current turn
-- [ ] Full auto-recording
+- [x] Full auto-recording
