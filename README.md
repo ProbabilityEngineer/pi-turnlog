@@ -14,10 +14,10 @@ Copy or symlink `.pi/extensions/pi-turnlog/` into your project-local `.pi/extens
 
 - `/turnlog-init`
 - `/turnlog-status`
-- `/turnlog-start`
+- `/turnlog-start --goal "..." [--ticket ...]`
 - `/turnlog-record`
-- `/turnlog-show`
-- `/turnlog-report`
+- `/turnlog-show <id>`
+- `/turnlog-report <id>`
 
 ## Notes
 

@@ -40,7 +40,7 @@ function parseArgs(input: string): string[] {
 }
 
 function usageError(message: string): Error {
-  return new Error(`turnlog: ${message}`);
+  return new Error(message);
 }
 
 function resolveTurnlogBin(): string {
@@ -72,13 +72,13 @@ async function notifyResult(ctx: Parameters<Parameters<ExtensionAPI["registerCom
 
 function requireOneArg(raw: string, cmd: string): string {
   const args = parseArgs(raw);
-  if (args.length !== 1) throw usageError(`${cmd} requires exactly one ID`);
+  if (args.length !== 1) throw usageError(`Usage: /${cmd} <id>`);
   return args[0];
 }
 
 function requireAtLeastOneArg(raw: string, cmd: string): string[] {
   const args = parseArgs(raw);
-  if (!args.length) throw usageError(`${cmd} requires arguments`);
+  if (!args.length) throw usageError(`Usage: /${cmd} --goal "..." [--ticket ...]`);
   return args;
 }
 
@@ -100,7 +100,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("turnlog-start", {
     description: "Start a new turnlog session",
     handler: async (args, ctx) => {
-      const parsed = requireAtLeastOneArg(args, "turnlog start");
+      const parsed = requireAtLeastOneArg(args, "turnlog-start");
       await notifyResult(ctx, "turnlog start", ["start", ...parsed]);
     },
   });
@@ -115,7 +115,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("turnlog-show", {
     description: "Show a session or turn",
     handler: async (args, ctx) => {
-      const id = requireOneArg(args, "turnlog show");
+      const id = requireOneArg(args, "turnlog-show");
       await notifyResult(ctx, "turnlog show", ["show", id]);
     },
   });
@@ -123,7 +123,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("turnlog-report", {
     description: "Print a session report",
     handler: async (args, ctx) => {
-      const id = requireOneArg(args, "turnlog report");
+      const id = requireOneArg(args, "turnlog-report");
       await notifyResult(ctx, "turnlog report", ["report", id]);
     },
   });
