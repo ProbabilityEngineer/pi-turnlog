@@ -1,0 +1,11 @@
+{
+  "name": "pi-turnlog",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.75.4"
+  },
+  "pi": {
+    "extensions": ["./.pi/extensions/pi-turnlog/index.ts"]
+  }
+}
