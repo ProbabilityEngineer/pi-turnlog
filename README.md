@@ -15,6 +15,7 @@ Copy or symlink the installed package into Pi, then reload Pi.
 - `/turnlog-init`
 - `/turnlog-status`
 - `/turnlog-current`
+- `/turnlog-context`
 - `/turnlog-footer`
 - `/turnlog-start --goal "..." [--ticket ...]`
 - `/turnlog-record`

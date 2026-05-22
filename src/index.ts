@@ -127,6 +127,15 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  pi.registerCommand("turnlog-context", {
+    description: "Show concise turnlog context",
+    handler: async (_args, ctx) => {
+      const stdout = await notifyResult(ctx, "turnlog context", ["status"]);
+      const summary = formatCurrentStatus(stdout);
+      if (summary) ctx.ui.notify(`turnlog context:\n${summary}`, "info");
+    },
+  });
+
   pi.registerCommand("turnlog-footer", {
     description: "Toggle the turnlog status footer",
     handler: async (_args, ctx) => {
