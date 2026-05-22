@@ -7,4 +7,5 @@
 - [x] Add init command and required-arg validation
 - [x] Move extension entrypoint out of `.pi/extensions/`
 - [x] Add current status widget and command
+- [x] Add status footer toggle
 - [ ] Add session/turn auto-context integration
