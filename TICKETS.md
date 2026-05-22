@@ -5,4 +5,5 @@
 - [x] Document install and usage
 - [x] Add argument parsing and structured output
 - [x] Add init command and required-arg validation
+- [x] Move extension entrypoint out of `.pi/extensions/`
 - [ ] Add session/turn auto-context integration

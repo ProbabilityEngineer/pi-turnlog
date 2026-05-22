@@ -6,6 +6,6 @@
     "@earendil-works/pi-coding-agent": "^0.75.4"
   },
   "pi": {
-    "extensions": ["./.pi/extensions/pi-turnlog/index.ts"]
+    "extensions": ["./src/index.ts"]
   }
 }

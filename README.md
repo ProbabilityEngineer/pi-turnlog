@@ -8,7 +8,7 @@ Provide a thin Pi-facing wrapper around the `turnlog` CLI.
 
 ## Local usage
 
-Copy or symlink `.pi/extensions/pi-turnlog/` into your project-local `.pi/extensions/` directory, then reload Pi.
+Copy or symlink the installed package into Pi, then reload Pi.
 
 ## Commands
 
@@ -24,3 +24,4 @@ Copy or symlink `.pi/extensions/pi-turnlog/` into your project-local `.pi/extens
 - quoted arguments are supported
 - `TURNLOG_BIN` overrides the executable path
 - stdout/stderr are surfaced in Pi
+- source entrypoint is `src/index.ts`
