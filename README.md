@@ -18,7 +18,7 @@ Copy or symlink the installed package into Pi, then reload Pi.
 - `/turnlog-context`
 - `/turnlog-footer`
 - `/turnlog-start --goal "..." [--ticket ...]`
-- `/turnlog-record`
+- `/turnlog-record [--summary "..."]`
 - `/turnlog-show <id>`
 - `/turnlog-report <id>`
 
@@ -26,6 +26,7 @@ Copy or symlink the installed package into Pi, then reload Pi.
 
 - quoted arguments are supported
 - `TURNLOG_BIN` overrides the executable path
+- `/turnlog-record` prompts for a summary when called without arguments
 - stdout/stderr are surfaced in Pi
 - the status footer is off by default and can be toggled with `/turnlog-toggle`
 - source entrypoint is `src/index.ts`

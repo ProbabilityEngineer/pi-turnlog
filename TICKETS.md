@@ -9,3 +9,6 @@
 - [x] Add current status widget and command
 - [x] Add status footer toggle
 - [x] Add session/turn auto-context integration
+- [x] Improve record UX
+- [ ] Assisted record current turn
+- [ ] Full auto-recording
