@@ -139,15 +139,23 @@ export default function (pi: ExtensionAPI) {
   let lastAssistantSummary = "";
   const recordedTurnKeys = new Set<string>();
 
-  pi.on("turn_end", async (event, ctx) => {
+  pi.on("turn_end", async (event) => {
     const text = messageText((event as any).message);
     const summary = summarizeText(text);
     if (summary) lastAssistantSummary = summary;
+  });
 
+  pi.on("message_end", async (event, ctx) => {
+    const message = (event as any).message;
+    if (message?.role !== "assistant") return;
+
+    const summary = summarizeText(messageText(message));
+    if (summary) lastAssistantSummary = summary;
     if (!autoRecordEnabled || !summary) return;
-    const turnKey = String((event as any).turnIndex ?? summary);
-    if (recordedTurnKeys.has(turnKey)) return;
-    recordedTurnKeys.add(turnKey);
+
+    const messageKey = String(message.id ?? (event as any).turnIndex ?? summary);
+    if (recordedTurnKeys.has(messageKey)) return;
+    recordedTurnKeys.add(messageKey);
 
     const result = await runTurnlog(["record", "--summary", summary]);
     if (result.code === 0) {
@@ -157,12 +165,6 @@ export default function (pi: ExtensionAPI) {
       const stderr = result.stderr.trim() || `exit code ${result.code}`;
       ctx.ui.notify(`turnlog auto-record failed:\n${stderr}`, "warning");
     }
-  });
-
-  pi.on("message_end", async (event) => {
-    if ((event as any).message?.role !== "assistant") return;
-    const summary = summarizeText(messageText((event as any).message));
-    if (summary) lastAssistantSummary = summary;
   });
 
   pi.on("session_start", async (_event, ctx) => {
