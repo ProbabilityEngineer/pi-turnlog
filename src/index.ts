@@ -83,13 +83,24 @@ function requireAtLeastOneArg(raw: string, cmd: string): string[] {
   return args;
 }
 
-function formatCurrentStatus(stdout: string): string {
+function statusLines(stdout: string): string[] {
   return stdout
     .split(/\r?\n/)
     .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 4)
-    .join(" | ");
+    .filter(Boolean);
+}
+
+function formatCurrentStatus(stdout: string): string {
+  return statusLines(stdout).slice(0, 4).join(" | ");
+}
+
+function formatContext(stdout: string): string {
+  const lines = statusLines(stdout);
+  const session = lines.find((line) => line.startsWith("current session:")) ?? "current session: none";
+  const turn = lines.find((line) => line.startsWith("last turn:")) ?? "last turn: none";
+  const vcs = lines.find((line) => line.startsWith("vcs:")) ?? "vcs: unknown";
+  const dirty = lines.find((line) => line.startsWith("dirty:"));
+  return [session, turn, dirty ? `${vcs} ${dirty}` : vcs].join("\n");
 }
 
 export default function (pi: ExtensionAPI) {
@@ -131,7 +142,7 @@ export default function (pi: ExtensionAPI) {
     description: "Show concise turnlog context",
     handler: async (_args, ctx) => {
       const stdout = await notifyResult(ctx, "turnlog context", ["status"]);
-      const summary = formatCurrentStatus(stdout);
+      const summary = formatContext(stdout);
       if (summary) ctx.ui.notify(`turnlog context:\n${summary}`, "info");
     },
   });
