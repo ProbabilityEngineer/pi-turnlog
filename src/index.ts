@@ -123,7 +123,9 @@ async function buildRecordArgs(raw: string, ctx: any, suggestedSummary?: string)
   const args = parseArgs(raw);
   if (args.length) return args;
 
-  const summary = (await ctx.ui.input("Record turn summary", suggestedSummary || "what changed?"))?.trim();
+  const summary = (suggestedSummary
+    ? await ctx.ui.editor("Record turn summary", suggestedSummary)
+    : await ctx.ui.input("Record turn summary", "what changed?"))?.trim();
   if (!summary) {
     ctx.ui.notify("turnlog record cancelled", "info");
     return null;
