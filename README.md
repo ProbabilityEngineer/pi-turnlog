@@ -12,6 +12,7 @@ Copy or symlink `.pi/extensions/pi-turnlog/` into your project-local `.pi/extens
 
 ## Commands
 
+- `/turnlog-init`
 - `/turnlog-status`
 - `/turnlog-start`
 - `/turnlog-record`
@@ -21,4 +22,5 @@ Copy or symlink `.pi/extensions/pi-turnlog/` into your project-local `.pi/extens
 ## Notes
 
 - quoted arguments are supported
+- `TURNLOG_BIN` overrides the executable path
 - stdout/stderr are surfaced in Pi
