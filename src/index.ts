@@ -93,7 +93,10 @@ function formatCurrentStatus(stdout: string): string {
 }
 
 export default function (pi: ExtensionAPI) {
+  let footerEnabled = false;
+
   pi.on("session_start", async (_event, ctx) => {
+    if (!footerEnabled) return;
     try {
       const stdout = await notifyResult(ctx, "turnlog status", ["status"]);
       const summary = formatCurrentStatus(stdout);
@@ -121,6 +124,25 @@ export default function (pi: ExtensionAPI) {
     description: "Show current turnlog session and last turn",
     handler: async (_args, ctx) => {
       await notifyResult(ctx, "turnlog current", ["status"]);
+    },
+  });
+
+  pi.registerCommand("turnlog-footer", {
+    description: "Toggle the turnlog status footer",
+    handler: async (_args, ctx) => {
+      footerEnabled = !footerEnabled;
+      ctx.ui.notify(`turnlog footer ${footerEnabled ? "enabled" : "disabled"}`, "info");
+      if (footerEnabled) {
+        try {
+          const stdout = await notifyResult(ctx, "turnlog status", ["status"]);
+          const summary = formatCurrentStatus(stdout);
+          if (summary) ctx.ui.setStatus("turnlog", summary);
+        } catch {
+          // best effort only
+        }
+      } else {
+        ctx.ui.setStatus("turnlog", "");
+      }
     },
   });
 
