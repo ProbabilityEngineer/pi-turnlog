@@ -4,7 +4,7 @@ Pi extension layer for `turnlog`.
 
 ## Goal
 
-Provide a thin Pi-facing wrapper around the `turnlog` CLI.
+Provide a thin Pi-facing wrapper around the `turnlog` CLI for durable session and turn provenance.
 
 ## Local usage
 
@@ -12,25 +12,27 @@ Copy or symlink the installed package into Pi, then reload Pi.
 
 ## Commands
 
-- `/turnlog-init`
-- `/turnlog-status`
-- `/turnlog-current`
-- `/turnlog-context`
-- `/turnlog-footer`
-- `/turnlog-auto`
-- `/turnlog-start --goal "..." [--ticket ...]`
-- `/turnlog-record [--summary "..."]`
-- `/turnlog-record-turn [--summary "..."]`
-- `/turnlog-show <id>`
-- `/turnlog-report <id>`
+The slash-command surface is intentionally compact:
+
+- `/turnlog-status` — show current turnlog/VCS status.
+- `/turnlog-start --goal "..." [--ticket ...]` — initialize `.turnlog/` if needed and start a new session.
+- `/turnlog-record [--summary "..."]` — record the latest assistant turn only when repository changes make it meaningful.
+
+## Tool
+
+One compact model-visible tool:
+
+```text
+turnlog action: status/init/start/record/report/auto
+```
+
+Use the tool when the user wants durable provenance, handoff records, or a session report.
 
 ## Notes
 
 - quoted arguments are supported
 - `TURNLOG_BIN` overrides the executable path
-- `/turnlog-record` prompts for a summary when called without arguments
-- `/turnlog-record-turn` opens an editor with a suggested summary from the latest assistant turn
 - stdout/stderr are surfaced in Pi
-- the status footer is off by default and can be toggled with `/turnlog-footer`
-- auto-recording is off by default and can be toggled with `/turnlog-auto`
+- auto-recording is off by default and can be enabled with `turnlog action=auto enabled=true`
+- auto-record and `/turnlog-record` skip chat-only turns when no repository change is detected
 - source entrypoint is `src/index.ts`

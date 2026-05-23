@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@earendil-works/pi-coding-agent": "^0.75.4"
+    "@earendil-works/pi-coding-agent": "^0.75.4",
+    "typebox": "latest"
   },
   "pi": {
     "extensions": ["./src/index.ts"]

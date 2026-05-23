@@ -1,5 +1,20 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
 import { spawn } from "node:child_process";
+
+const ACTIONS = ["status", "init", "start", "record", "report", "auto"] as const;
+type TurnlogAction = (typeof ACTIONS)[number];
+
+type ToolParams = {
+  action: TurnlogAction;
+  goal?: string;
+  ticket?: string;
+  summary?: string;
+  id?: string;
+  enabled?: boolean;
+};
+
+type ToolCtx = { cwd?: string; ui?: { notify?: (message: string, level?: "info" | "warning" | "error") => void } };
 
 function parseArgs(input: string): string[] {
   const args: string[] = [];
@@ -39,17 +54,17 @@ function parseArgs(input: string): string[] {
   return args;
 }
 
-function usageError(message: string): Error {
-  return new Error(message);
-}
-
 function resolveTurnlogBin(): string {
   return process.env.TURNLOG_BIN?.trim() || "turnlog";
 }
 
-function runTurnlog(args: string[]): Promise<{ code: number; stdout: string; stderr: string }> {
+function text(content: string, details: Record<string, unknown> = {}) {
+  return { content: [{ type: "text" as const, text: content }], details };
+}
+
+function runTurnlog(args: string[], cwd?: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    const child = spawn(resolveTurnlogBin(), args, { stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(resolveTurnlogBin(), args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
     let stdout = "";
     let stderr = "";
     child.stdout.setEncoding("utf8");
@@ -61,26 +76,18 @@ function runTurnlog(args: string[]): Promise<{ code: number; stdout: string; std
   });
 }
 
-async function notifyResult(ctx: any, label: string, args: string[]) {
-  const result = await runTurnlog(args);
+async function runCli(args: string[], cwd?: string) {
+  const result = await runTurnlog(args, cwd);
   const stdout = result.stdout.trim();
   const stderr = result.stderr.trim();
-  if (stdout) ctx.ui.notify(`${label}:\n${stdout}`, "info");
-  if (stderr) ctx.ui.notify(`${label} stderr:\n${stderr}`, "warning");
-  if (result.code !== 0) throw new Error(`${label} failed with exit code ${result.code}`);
+  if (result.code !== 0) throw new Error(stderr || `turnlog ${args[0]} failed with exit code ${result.code}`);
+  return stdout || stderr || `turnlog ${args[0]} ok`;
+}
+
+async function notifyResult(ctx: any, label: string, args: string[]) {
+  const stdout = await runCli(args, ctx.cwd);
+  ctx.ui.notify(`${label}:\n${stdout}`, "info");
   return stdout;
-}
-
-function requireOneArg(raw: string, cmd: string): string {
-  const args = parseArgs(raw);
-  if (args.length !== 1) throw usageError(`Usage: /${cmd} <id>`);
-  return args[0];
-}
-
-function requireAtLeastOneArg(raw: string, cmd: string): string[] {
-  const args = parseArgs(raw);
-  if (!args.length) throw usageError(`Usage: /${cmd} --goal "..." [--ticket ...]`);
-  return args;
 }
 
 function statusLines(stdout: string): string[] {
@@ -91,16 +98,7 @@ function statusLines(stdout: string): string[] {
 }
 
 function formatCurrentStatus(stdout: string): string {
-  return statusLines(stdout).slice(0, 4).join(" | ");
-}
-
-function formatContext(stdout: string): string {
-  const lines = statusLines(stdout);
-  const session = lines.find((line) => line.startsWith("current session:")) ?? "current session: none";
-  const turn = lines.find((line) => line.startsWith("last turn:")) ?? "last turn: none";
-  const vcs = lines.find((line) => line.startsWith("vcs:")) ?? "vcs: unknown";
-  const dirty = lines.find((line) => line.startsWith("dirty:"));
-  return [session, turn, dirty ? `${vcs} ${dirty}` : vcs].join("\n");
+  return statusLines(stdout).slice(0, 5).join(" | ");
 }
 
 function messageText(message: any): string {
@@ -115,33 +113,82 @@ function messageText(message: any): string {
   return "";
 }
 
-function summarizeText(text: string): string {
-  return text.replace(/\s+/g, " ").trim().slice(0, 120);
+function summarizeText(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
-async function buildRecordArgs(raw: string, ctx: any, suggestedSummary?: string): Promise<string[] | null> {
-  const args = parseArgs(raw);
-  if (args.length) return args;
+function isDirtyStatus(stdout: string): boolean {
+  return statusLines(stdout).some((line) => line === "dirty: true" || line.startsWith("changed files:"));
+}
 
-  const summary = (suggestedSummary
-    ? await ctx.ui.editor("Record turn summary", suggestedSummary)
-    : await ctx.ui.input("Record turn summary", "what changed?"))?.trim();
-  if (!summary) {
-    ctx.ui.notify("turnlog record cancelled", "info");
-    return null;
+async function hasMeaningfulTurn(cwd?: string): Promise<boolean> {
+  try {
+    return isDirtyStatus(await runCli(["status"], cwd));
+  } catch {
+    return false;
   }
-  return ["--summary", summary];
+}
+
+async function recordIfMeaningful(cwd: string | undefined, summary: string): Promise<string> {
+  const cleanSummary = summary.trim();
+  if (!cleanSummary) return "No assistant summary available; nothing recorded.";
+  if (!(await hasMeaningfulTurn(cwd))) return "No meaningful repository change detected; nothing recorded.";
+  return runCli(["record", "--summary", cleanSummary], cwd);
+}
+
+async function ensureInitialized(cwd?: string): Promise<void> {
+  try {
+    const status = await runCli(["status"], cwd);
+    if (status.includes("turnlog: initialized")) return;
+  } catch {
+    // initialize below
+  }
+  await runCli(["init"], cwd);
+}
+
+async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = "", setAuto?: (enabled: boolean) => boolean) {
+  if (params.action === "status") return runCli(["status"], cwd);
+  if (params.action === "init") return runCli(["init"], cwd);
+  if (params.action === "start") {
+    const goal = params.goal?.trim();
+    if (!goal) throw new Error("goal is required for turnlog start");
+    await ensureInitialized(cwd);
+    const args = ["start", "--goal", goal];
+    if (params.ticket?.trim()) args.push("--ticket", params.ticket.trim());
+    return runCli(args, cwd);
+  }
+  if (params.action === "record") return recordIfMeaningful(cwd, params.summary?.trim() || lastAssistantSummary);
+  if (params.action === "report") {
+    if (!params.id?.trim()) throw new Error("id is required for turnlog report");
+    return runCli(["report", params.id.trim(), "--stdout"], cwd);
+  }
+  if (params.action === "auto") {
+    if (!setAuto) throw new Error("auto control unavailable");
+    const enabled = setAuto(params.enabled ?? true);
+    return `turnlog auto-record ${enabled ? "enabled" : "disabled"}`;
+  }
+  return "Unknown turnlog action";
+}
+
+function startArgs(raw: string): { goal?: string; ticket?: string } {
+  const args = parseArgs(raw);
+  let goal: string | undefined;
+  let ticket: string | undefined;
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] === "--goal") goal = args[++i];
+    else if (args[i] === "--ticket") ticket = args[++i];
+  }
+  if (!goal && args.length) goal = args.join(" ");
+  return { goal, ticket };
 }
 
 export default function (pi: ExtensionAPI) {
-  let footerEnabled = false;
   let autoRecordEnabled = false;
   let lastAssistantSummary = "";
   const recordedTurnKeys = new Set<string>();
 
   pi.on("turn_end", async (event) => {
-    const text = messageText((event as any).message);
-    const summary = summarizeText(text);
+    const summary = summarizeText(messageText((event as any).message));
     if (summary) lastAssistantSummary = summary;
   });
 
@@ -152,37 +199,18 @@ export default function (pi: ExtensionAPI) {
     const summary = summarizeText(messageText(message));
     if (summary) lastAssistantSummary = summary;
     if (!autoRecordEnabled || !summary) return;
+    if (!(await hasMeaningfulTurn(ctx.cwd))) return;
 
     const messageKey = String(message.id ?? (event as any).turnIndex ?? summary);
     if (recordedTurnKeys.has(messageKey)) return;
     recordedTurnKeys.add(messageKey);
 
-    const result = await runTurnlog(["record", "--summary", summary]);
-    if (result.code === 0) {
-      const stdout = result.stdout.trim();
-      if (stdout) ctx.ui.notify(`turnlog auto-record:\n${stdout}`, "info");
-    } else {
-      const stderr = result.stderr.trim() || `exit code ${result.code}`;
-      ctx.ui.notify(`turnlog auto-record failed:\n${stderr}`, "warning");
-    }
-  });
-
-  pi.on("session_start", async (_event, ctx) => {
-    if (!footerEnabled) return;
     try {
-      const stdout = await notifyResult(ctx, "turnlog status", ["status"]);
-      const summary = formatCurrentStatus(stdout);
-      if (summary) ctx.ui.setStatus("turnlog", summary);
-    } catch {
-      // best effort only
+      const stdout = await runCli(["record", "--summary", summary], ctx.cwd);
+      ctx.ui.notify(`turnlog auto-record:\n${stdout}`, "info");
+    } catch (error) {
+      ctx.ui.notify(`turnlog auto-record failed:\n${error instanceof Error ? error.message : String(error)}`, "warning");
     }
-  });
-
-  pi.registerCommand("turnlog-init", {
-    description: "Initialize turnlog storage",
-    handler: async (_args, ctx) => {
-      await notifyResult(ctx, "turnlog init", ["init"]);
-    },
   });
 
   pi.registerCommand("turnlog-status", {
@@ -192,88 +220,52 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("turnlog-current", {
-    description: "Show current turnlog session and last turn",
-    handler: async (_args, ctx) => {
-      await notifyResult(ctx, "turnlog current", ["status"]);
-    },
-  });
-
-  pi.registerCommand("turnlog-context", {
-    description: "Show concise turnlog context",
-    handler: async (_args, ctx) => {
-      const stdout = await notifyResult(ctx, "turnlog context", ["status"]);
-      const summary = formatContext(stdout);
-      if (summary) ctx.ui.notify(`turnlog context:\n${summary}`, "info");
-    },
-  });
-
-  pi.registerCommand("turnlog-footer", {
-    description: "Toggle the turnlog status footer",
-    handler: async (_args, ctx) => {
-      footerEnabled = !footerEnabled;
-      ctx.ui.notify(`turnlog footer ${footerEnabled ? "enabled" : "disabled"}`, "info");
-      if (footerEnabled) {
-        try {
-          const stdout = await notifyResult(ctx, "turnlog status", ["status"]);
-          const summary = formatCurrentStatus(stdout);
-          if (summary) ctx.ui.setStatus("turnlog", summary);
-        } catch {
-          // best effort only
-        }
-      } else {
-        ctx.ui.setStatus("turnlog", "");
-      }
-    },
-  });
-
-  pi.registerCommand("turnlog-auto", {
-    description: "Toggle automatic turnlog recording for assistant turns",
-    handler: async (_args, ctx) => {
-      autoRecordEnabled = !autoRecordEnabled;
-      ctx.ui.notify(`turnlog auto-record ${autoRecordEnabled ? "enabled" : "disabled"}`, "info");
-    },
-  });
-
   pi.registerCommand("turnlog-start", {
-    description: "Start a new turnlog session",
+    description: "Initialize if needed and start a new turnlog session",
     handler: async (args, ctx) => {
-      const parsed = requireAtLeastOneArg(args, "turnlog-start");
-      await notifyResult(ctx, "turnlog start", ["start", ...parsed]);
+      const parsed = startArgs(args);
+      if (!parsed.goal) throw new Error('Usage: /turnlog-start --goal "..." [--ticket ...]');
+      await notifyResult(ctx, "turnlog init", ["init"]);
+      const start = ["start", "--goal", parsed.goal];
+      if (parsed.ticket) start.push("--ticket", parsed.ticket);
+      await notifyResult(ctx, "turnlog start", start);
     },
   });
 
   pi.registerCommand("turnlog-record", {
-    description: "Record a turnlog turn",
+    description: "Record the latest assistant turn only when repository changes make it meaningful",
     handler: async (args, ctx) => {
-      const recordArgs = await buildRecordArgs(args, ctx);
-      if (!recordArgs) return;
-      await notifyResult(ctx, "turnlog record", ["record", ...recordArgs]);
+      const parsed = parseArgs(args);
+      const explicitSummary = parsed.length ? parsed.join(" ").replace(/^--summary\s+/, "") : "";
+      const stdout = await recordIfMeaningful(ctx.cwd, explicitSummary || lastAssistantSummary);
+      ctx.ui.notify(`turnlog record:\n${stdout}`, "info");
     },
   });
 
-  pi.registerCommand("turnlog-record-turn", {
-    description: "Record the latest assistant turn with an editable suggested summary",
-    handler: async (args, ctx) => {
-      const recordArgs = await buildRecordArgs(args, ctx, lastAssistantSummary);
-      if (!recordArgs) return;
-      await notifyResult(ctx, "turnlog record", ["record", ...recordArgs]);
+  pi.registerTool({
+    name: "turnlog",
+    label: "Turnlog",
+    description: "Compact turn/session provenance tool: status/init/start/record/report/auto.",
+    promptSnippet: "Turnlog routing: use turnlog for explicit session/turn provenance; record only meaningful assistant turns with repository changes.",
+    promptGuidelines: [
+      "Use turnlog status/init/start/record/report/auto when the user wants durable provenance or handoff records.",
+      "Do not auto-record chat-only turns; turnlog record should capture meaningful assistant turns with repository changes.",
+    ],
+    parameters: Type.Object({
+      action: Type.String({ enum: [...ACTIONS] as string[] }),
+      goal: Type.Optional(Type.String()),
+      ticket: Type.Optional(Type.String()),
+      summary: Type.Optional(Type.String()),
+      id: Type.Optional(Type.String()),
+      enabled: Type.Optional(Type.Boolean()),
+    }),
+    async execute(_id: string, params: ToolParams, _signal: AbortSignal, _update: unknown, ctx: ToolCtx) {
+      try {
+        const output = await execute(params, ctx.cwd, lastAssistantSummary, (enabled) => (autoRecordEnabled = enabled));
+        return text(output, { action: params.action });
+      } catch (error) {
+        return text(error instanceof Error ? error.message : String(error), { code: 2 });
+      }
     },
-  });
-
-  pi.registerCommand("turnlog-show", {
-    description: "Show a session or turn",
-    handler: async (args, ctx) => {
-      const id = requireOneArg(args, "turnlog-show");
-      await notifyResult(ctx, "turnlog show", ["show", id]);
-    },
-  });
-
-  pi.registerCommand("turnlog-report", {
-    description: "Print a session report",
-    handler: async (args, ctx) => {
-      const id = requireOneArg(args, "turnlog-report");
-      await notifyResult(ctx, "turnlog report", ["report", id]);
-    },
-  });
+  } as any);
 }
