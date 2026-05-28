@@ -35,4 +35,4 @@ Use the tool when the user wants durable provenance, handoff records, or a sessi
 - stdout/stderr are surfaced in Pi
 - auto-recording is off by default and can be enabled with `turnlog action=auto enabled=true`
 - auto-record and `/turnlog-record` skip chat-only turns when no repository change is detected
-- source entrypoint is `src/index.ts`
+- source entrypoint is `index.ts`
