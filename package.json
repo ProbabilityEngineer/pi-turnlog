@@ -10,5 +10,11 @@
     "extensions": [
       "./index.ts"
     ]
+  },
+  "scripts": {
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1"
   }
 }
