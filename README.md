@@ -34,6 +34,7 @@ Use the tool when the user wants durable provenance, handoff records, or a sessi
 - `TURNLOG_BIN` overrides the executable path
 - stdout/stderr are surfaced in Pi
 - auto-recording is off by default and can be enabled with `turnlog action=auto enabled=true`
+- auto-record automatically initializes turnlog and starts a conservative session when meaningful repository changes exist
 - auto-record and `/turnlog-record` skip chat-only turns when no repository change is detected
 - `turnlog init` through this extension adds `.turnlog/` to `.gitignore` so local provenance is not pushed to GitHub by default
 - `/turnlog-record --auto-init --auto-start --goal "..." --summary "..."` can initialize turnlog and start a session before recording; without those flags, failures remain explicit

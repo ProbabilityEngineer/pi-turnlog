@@ -293,14 +293,18 @@ export default function (pi: ExtensionAPI) {
     const summary = summarizeText(messageText(message));
     if (summary) lastAssistantSummary = summary;
     if (!autoRecordEnabled || !summary) return;
-    if (!(await hasMeaningfulTurn(ctx.cwd))) return;
 
     const messageKey = String(message.id ?? (event as any).turnIndex ?? summary);
     if (recordedTurnKeys.has(messageKey)) return;
     recordedTurnKeys.add(messageKey);
 
     try {
-      const stdout = await runCli(["record", "--summary", summary], ctx.cwd);
+      const stdout = await recordIfMeaningful(ctx.cwd, summary, {
+        autoInit: true,
+        autoStart: true,
+        goal: "Automatic Pi turn provenance",
+      });
+      if (stdout.startsWith("No meaningful repository change detected")) return;
       ctx.ui.notify(`turnlog auto-record:\n${stdout}`, "info");
     } catch (error) {
       ctx.ui.notify(`turnlog auto-record failed:\n${error instanceof Error ? error.message : String(error)}`, "warning");
