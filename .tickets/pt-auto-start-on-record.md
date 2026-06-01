@@ -1,6 +1,6 @@
 ---
 id: pt-auto-start-on-record
-status: open
+status: closed
 deps: [pt-auto-init-on-use]
 links: []
 created: 2026-06-01T00:00:00Z
@@ -40,3 +40,10 @@ Record repository work and continuation context
 - The record is written after the session starts.
 - If a session is already active, no extra session is created.
 - The user-visible output is compact and includes the new session id when one was created.
+
+
+## Closure
+
+Implemented opt-in `--auto-start` / `autoStart` for record workflows. If no active session is detected, pi-turnlog starts one with supplied goal or conservative default before recording.
+
+Validated with `npx tsc --noEmit --skipLibCheck --module nodenext --moduleResolution nodenext --target es2022 index.ts`.

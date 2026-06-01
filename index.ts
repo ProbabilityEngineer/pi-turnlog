@@ -12,6 +12,8 @@ type ToolParams = {
   summary?: string;
   id?: string;
   enabled?: boolean;
+  autoInit?: boolean;
+  autoStart?: boolean;
 };
 
 type ToolCtx = { cwd?: string; ui?: { notify?: (message: string, level?: "info" | "warning" | "error") => void } };
@@ -129,21 +131,55 @@ async function hasMeaningfulTurn(cwd?: string): Promise<boolean> {
   }
 }
 
-async function recordIfMeaningful(cwd: string | undefined, summary: string): Promise<string> {
-  const cleanSummary = summary.trim();
-  if (!cleanSummary) return "No assistant summary available; nothing recorded.";
-  if (!(await hasMeaningfulTurn(cwd))) return "No meaningful repository change detected; nothing recorded.";
-  return runCli(["record", "--summary", cleanSummary], cwd);
+function isMissingTurnlogError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /not in an? turnlog repo|run `turnlog init`|turnlog init/i.test(message);
 }
 
-async function ensureInitialized(cwd?: string): Promise<void> {
+function hasActiveSession(status: string): boolean {
+  return /^current session:\s+\S+/m.test(status) && !/^current session:\s*(none|\(none\))/mi.test(status);
+}
+
+async function statusOrEmpty(cwd?: string): Promise<string> {
+  try { return await runCli(["status"], cwd); } catch { return ""; }
+}
+
+async function ensureInitialized(cwd?: string): Promise<boolean> {
   try {
     const status = await runCli(["status"], cwd);
-    if (status.includes("turnlog: initialized")) return;
-  } catch {
-    // initialize below
+    if (status.includes("turnlog: initialized")) return false;
+  } catch (error) {
+    if (!isMissingTurnlogError(error)) throw error;
   }
   await runCli(["init"], cwd);
+  return true;
+}
+
+async function ensureActiveSession(cwd: string | undefined, goal: string | undefined, ticket?: string): Promise<string | undefined> {
+  const status = await statusOrEmpty(cwd);
+  if (hasActiveSession(status)) return undefined;
+  const sessionGoal = goal?.trim() || "Record repository work and continuation context";
+  const args = ["start", "--goal", sessionGoal];
+  if (ticket?.trim()) args.push("--ticket", ticket.trim());
+  return runCli(args, cwd);
+}
+
+async function recordIfMeaningful(cwd: string | undefined, summary: string, options: { autoInit?: boolean; autoStart?: boolean; goal?: string; ticket?: string } = {}): Promise<string> {
+  const cleanSummary = summary.trim();
+  if (!cleanSummary) return "No assistant summary available; nothing recorded.";
+  if (options.autoInit) await ensureInitialized(cwd);
+  if (options.autoStart) await ensureActiveSession(cwd, options.goal, options.ticket);
+  if (!(await hasMeaningfulTurn(cwd))) return "No meaningful repository change detected; nothing recorded.";
+  try {
+    return await runCli(["record", "--summary", cleanSummary], cwd);
+  } catch (error) {
+    if (options.autoInit && isMissingTurnlogError(error)) {
+      await ensureInitialized(cwd);
+      if (options.autoStart) await ensureActiveSession(cwd, options.goal, options.ticket);
+      return runCli(["record", "--summary", cleanSummary], cwd);
+    }
+    throw error;
+  }
 }
 
 async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = "", setAuto?: (enabled: boolean) => boolean) {
@@ -157,7 +193,16 @@ async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = 
     if (params.ticket?.trim()) args.push("--ticket", params.ticket.trim());
     return runCli(args, cwd);
   }
-  if (params.action === "record") return recordIfMeaningful(cwd, params.summary?.trim() || lastAssistantSummary);
+  if (params.action === "record") {
+    const initialized = params.autoInit ? await ensureInitialized(cwd) : false;
+    const started = params.autoStart ? await ensureActiveSession(cwd, params.goal, params.ticket) : undefined;
+    const recorded = await recordIfMeaningful(cwd, params.summary?.trim() || lastAssistantSummary, { autoInit: false, autoStart: false });
+    return [
+      ...(initialized ? ["turnlog initialized"] : []),
+      ...(started ? [`turnlog session started:\n${started}`] : []),
+      recorded,
+    ].join("\n");
+  }
   if (params.action === "report") {
     if (!params.id?.trim()) throw new Error("id is required for turnlog report");
     return runCli(["report", params.id.trim(), "--stdout"], cwd);
@@ -180,6 +225,27 @@ function startArgs(raw: string): { goal?: string; ticket?: string } {
   }
   if (!goal && args.length) goal = args.join(" ");
   return { goal, ticket };
+}
+
+function recordArgs(raw: string): { summary?: string; goal?: string; ticket?: string; autoInit: boolean; autoStart: boolean } {
+  const args = parseArgs(raw);
+  let summary: string | undefined;
+  let goal: string | undefined;
+  let ticket: string | undefined;
+  let autoInit = false;
+  let autoStart = false;
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const value = args[i];
+    if (value === "--summary") summary = args[++i];
+    else if (value === "--goal") goal = args[++i];
+    else if (value === "--ticket") ticket = args[++i];
+    else if (value === "--auto-init") autoInit = true;
+    else if (value === "--auto-start") autoStart = true;
+    else positional.push(value);
+  }
+  if (!summary && positional.length) summary = positional.join(" ");
+  return { summary, goal, ticket, autoInit, autoStart };
 }
 
 export default function (pi: ExtensionAPI) {
@@ -235,10 +301,16 @@ export default function (pi: ExtensionAPI) {
   pi.registerCommand("turnlog-record", {
     description: "Record the latest assistant turn only when repository changes make it meaningful",
     handler: async (args, ctx) => {
-      const parsed = parseArgs(args);
-      const explicitSummary = parsed.length ? parsed.join(" ").replace(/^--summary\s+/, "") : "";
-      const stdout = await recordIfMeaningful(ctx.cwd, explicitSummary || lastAssistantSummary);
-      ctx.ui.notify(`turnlog record:\n${stdout}`, "info");
+      const parsed = recordArgs(args);
+      const initialized = parsed.autoInit ? await ensureInitialized(ctx.cwd) : false;
+      const started = parsed.autoStart ? await ensureActiveSession(ctx.cwd, parsed.goal, parsed.ticket) : undefined;
+      const stdout = await recordIfMeaningful(ctx.cwd, parsed.summary || lastAssistantSummary, { autoInit: false, autoStart: false });
+      ctx.ui.notify([
+        "turnlog record:",
+        ...(initialized ? ["turnlog initialized"] : []),
+        ...(started ? [`turnlog session started:\n${started}`] : []),
+        stdout,
+      ].join("\n"), "info");
     },
   });
 
@@ -258,6 +330,8 @@ export default function (pi: ExtensionAPI) {
       summary: Type.Optional(Type.String()),
       id: Type.Optional(Type.String()),
       enabled: Type.Optional(Type.Boolean()),
+      autoInit: Type.Optional(Type.Boolean()),
+      autoStart: Type.Optional(Type.Boolean()),
     }),
     async execute(_id: string, params: ToolParams, _signal: AbortSignal, _update: unknown, ctx: ToolCtx) {
       try {

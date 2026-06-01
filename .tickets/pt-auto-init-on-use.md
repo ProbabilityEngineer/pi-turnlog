@@ -1,6 +1,6 @@
 ---
 id: pt-auto-init-on-use
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-06-01T00:00:00Z
@@ -38,3 +38,10 @@ or equivalent tool/API option:
 - Existing explicit failure remains available when auto-init is not enabled.
 - Auto-init is idempotent when turnlog is already initialized.
 - Output is concise and explains that turnlog was initialized before recording.
+
+
+## Closure
+
+Implemented opt-in `--auto-init` / `autoInit` for record workflows. Existing record behavior remains explicit unless the flag/parameter is set.
+
+Validated with `npx tsc --noEmit --skipLibCheck --module nodenext --moduleResolution nodenext --target es2022 index.ts`.

@@ -1,6 +1,6 @@
 ---
 id: pt-auto-init-safety-config
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-06-01T00:00:00Z
@@ -25,3 +25,10 @@ Auto-initializing turnlog may create files in a repo. Define when that is safe a
 - Config or flag behavior is explicit.
 - Auto-init never silently overwrites existing data.
 - Errors are concise and actionable when auto-init is unsafe.
+
+
+## Closure
+
+Documented and implemented explicit opt-in safety policy: auto-init only runs when `--auto-init` or `autoInit` is supplied; it uses turnlog init idempotently and does not overwrite existing data.
+
+Validated with `npx tsc --noEmit --skipLibCheck --module nodenext --moduleResolution nodenext --target es2022 index.ts`.

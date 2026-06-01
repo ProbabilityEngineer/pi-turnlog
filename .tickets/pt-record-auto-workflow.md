@@ -1,6 +1,6 @@
 ---
 id: pt-record-auto-workflow
-status: open
+status: closed
 deps: [pt-auto-init-on-use, pt-auto-start-on-record]
 links: []
 created: 2026-06-01T00:00:00Z
@@ -39,3 +39,10 @@ Behavior:
 - Repeated calls in an initialized repo with an active session only append records.
 - Failure output includes enough diagnostics to recover manually.
 - Tool/API schema supports the same workflow used by the CLI.
+
+
+## Closure
+
+Implemented one-shot record workflow via `/turnlog-record --auto-init --auto-start --goal ... --summary ...` and tool `action=record` with `autoInit`/`autoStart` options.
+
+Validated with `npx tsc --noEmit --skipLibCheck --module nodenext --moduleResolution nodenext --target es2022 index.ts`.

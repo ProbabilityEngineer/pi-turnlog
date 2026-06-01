@@ -12,3 +12,6 @@
 - [x] Improve record UX
 - [x] Assisted record current turn
 - [x] Full auto-recording
+- [x] Auto-initialize turnlog on opt-in record
+- [x] Auto-start turnlog session on opt-in record
+- [x] One-shot auto record workflow
