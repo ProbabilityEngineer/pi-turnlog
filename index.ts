@@ -318,10 +318,13 @@ export default function (pi: ExtensionAPI) {
     name: "turnlog",
     label: "Turnlog",
     description: "Compact turn/session provenance tool: status/init/start/record/report/auto.",
-    promptSnippet: "Turnlog routing: use turnlog for explicit session/turn provenance; record only meaningful assistant turns with repository changes.",
+    promptSnippet: "Turnlog routing: use turnlog proactively for meaningful repository work; record only meaningful assistant turns with repository changes.",
     promptGuidelines: [
       "Use turnlog status/init/start/record/report/auto when the user wants durable provenance or handoff records.",
-      "Do not auto-record chat-only turns; turnlog record should capture meaningful assistant turns with repository changes.",
+      "Use turnlog proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context.",
+      "Do not record routine chat-only turns.",
+      "After a coherent repo change, record what changed, why, validation performed, tickets touched, and final VCS state.",
+      "If turnlog is uninitialized or has no active session, use explicit auto-init/auto-start only for meaningful repo work unless the user forbids persistence.",
     ],
     parameters: Type.Object({
       action: Type.String({ enum: [...ACTIONS] as string[] }),
