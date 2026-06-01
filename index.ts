@@ -323,7 +323,8 @@ export default function (pi: ExtensionAPI) {
       "Use turnlog status/init/start/record/report/auto when the user wants durable provenance or handoff records.",
       "Use turnlog proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context.",
       "Do not record routine chat-only turns.",
-      "After a coherent repo change, record what changed, why, validation performed, tickets touched, and final VCS state.",
+      "Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if .turnlog/ is tracked in that repo, include those changes in the same commit.",
+      "Do not record again after push unless committing that follow-up provenance record too.",
       "If turnlog is uninitialized or has no active session, use explicit auto-init/auto-start only for meaningful repo work unless the user forbids persistence.",
     ],
     parameters: Type.Object({
