@@ -1,6 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { spawn } from "node:child_process";
+import { readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const ACTIONS = ["status", "init", "start", "record", "report", "auto"] as const;
 type TurnlogAction = (typeof ACTIONS)[number];
@@ -144,14 +146,37 @@ async function statusOrEmpty(cwd?: string): Promise<string> {
   try { return await runCli(["status"], cwd); } catch { return ""; }
 }
 
+async function ensureTurnlogIgnored(cwd?: string): Promise<boolean> {
+  if (!cwd) return false;
+  const gitignorePath = join(cwd, ".gitignore");
+  const raw = await readFile(gitignorePath, "utf8").catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
+  const lines = raw.split(/\r?\n/).map((line) => line.trim());
+  if (lines.includes(".turnlog/") || lines.includes(".turnlog")) return false;
+  const separator = raw && !raw.endsWith("\n") ? "\n" : "";
+  await writeFile(gitignorePath, `${raw}${separator}.turnlog/\n`, "utf8");
+  return true;
+}
+
+async function initTurnlog(cwd?: string): Promise<{ output: string; ignored: boolean }> {
+  const output = await runCli(["init"], cwd);
+  const ignored = await ensureTurnlogIgnored(cwd);
+  return { output, ignored };
+}
+
 async function ensureInitialized(cwd?: string): Promise<boolean> {
   try {
     const status = await runCli(["status"], cwd);
-    if (status.includes("turnlog: initialized")) return false;
+    if (status.includes("turnlog: initialized")) {
+      await ensureTurnlogIgnored(cwd);
+      return false;
+    }
   } catch (error) {
     if (!isMissingTurnlogError(error)) throw error;
   }
-  await runCli(["init"], cwd);
+  await initTurnlog(cwd);
   return true;
 }
 
@@ -184,7 +209,10 @@ async function recordIfMeaningful(cwd: string | undefined, summary: string, opti
 
 async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = "", setAuto?: (enabled: boolean) => boolean) {
   if (params.action === "status") return runCli(["status"], cwd);
-  if (params.action === "init") return runCli(["init"], cwd);
+  if (params.action === "init") {
+    const result = await initTurnlog(cwd);
+    return [result.output, ...(result.ignored ? ["added .turnlog/ to .gitignore"] : [])].join("\n");
+  }
   if (params.action === "start") {
     const goal = params.goal?.trim();
     if (!goal) throw new Error("goal is required for turnlog start");
@@ -291,7 +319,8 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       const parsed = startArgs(args);
       if (!parsed.goal) throw new Error('Usage: /turnlog-start --goal "..." [--ticket ...]');
-      await notifyResult(ctx, "turnlog init", ["init"]);
+      const initialized = await initTurnlog(ctx.cwd);
+      ctx.ui.notify(["turnlog init:", initialized.output, ...(initialized.ignored ? ["added .turnlog/ to .gitignore"] : [])].join("\n"), "info");
       const start = ["start", "--goal", parsed.goal];
       if (parsed.ticket) start.push("--ticket", parsed.ticket);
       await notifyResult(ctx, "turnlog start", start);
