@@ -2,7 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 const ACTIONS = ["status", "init", "start", "record", "report", "auto"] as const;
 type TurnlogAction = (typeof ACTIONS)[number];
@@ -16,6 +16,7 @@ type ToolParams = {
   enabled?: boolean;
   autoInit?: boolean;
   autoStart?: boolean;
+  cwd?: string;
 };
 
 type ToolCtx = { cwd?: string; ui?: { notify?: (message: string, level?: "info" | "warning" | "error") => void } };
@@ -64,6 +65,13 @@ function resolveTurnlogBin(): string {
 
 function text(content: string, details: Record<string, unknown> = {}) {
   return { content: [{ type: "text" as const, text: content }], details };
+}
+
+function targetCwd(cwd?: string, requested?: string): string | undefined {
+  if (!requested?.trim()) return cwd;
+  const raw = requested.trim();
+  if (isAbsolute(raw)) return raw;
+  return resolve(cwd || process.cwd(), raw);
 }
 
 function runTurnlog(args: string[], cwd?: string): Promise<{ code: number; stdout: string; stderr: string }> {
@@ -243,23 +251,28 @@ async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = 
   return "Unknown turnlog action";
 }
 
-function startArgs(raw: string): { goal?: string; ticket?: string } {
+function startArgs(raw: string): { goal?: string; ticket?: string; cwd?: string } {
   const args = parseArgs(raw);
   let goal: string | undefined;
   let ticket: string | undefined;
+  let cwd: string | undefined;
+  const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     if (args[i] === "--goal") goal = args[++i];
     else if (args[i] === "--ticket") ticket = args[++i];
+    else if (args[i] === "--cwd" || args[i] === "-C") cwd = args[++i];
+    else positional.push(args[i]);
   }
-  if (!goal && args.length) goal = args.join(" ");
-  return { goal, ticket };
+  if (!goal && positional.length) goal = positional.join(" ");
+  return { goal, ticket, cwd };
 }
 
-function recordArgs(raw: string): { summary?: string; goal?: string; ticket?: string; autoInit: boolean; autoStart: boolean } {
+function recordArgs(raw: string): { summary?: string; goal?: string; ticket?: string; cwd?: string; autoInit: boolean; autoStart: boolean } {
   const args = parseArgs(raw);
   let summary: string | undefined;
   let goal: string | undefined;
   let ticket: string | undefined;
+  let cwd: string | undefined;
   let autoInit = false;
   let autoStart = false;
   const positional: string[] = [];
@@ -268,12 +281,13 @@ function recordArgs(raw: string): { summary?: string; goal?: string; ticket?: st
     if (value === "--summary") summary = args[++i];
     else if (value === "--goal") goal = args[++i];
     else if (value === "--ticket") ticket = args[++i];
+    else if (value === "--cwd" || value === "-C") cwd = args[++i];
     else if (value === "--auto-init") autoInit = true;
     else if (value === "--auto-start") autoStart = true;
     else positional.push(value);
   }
   if (!summary && positional.length) summary = positional.join(" ");
-  return { summary, goal, ticket, autoInit, autoStart };
+  return { summary, goal, ticket, cwd, autoInit, autoStart };
 }
 
 export default function (pi: ExtensionAPI) {
@@ -313,8 +327,9 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("turnlog-status", {
     description: "Show turnlog status",
-    handler: async (_args, ctx) => {
-      await notifyResult(ctx, "turnlog status", ["status"]);
+    handler: async (args, ctx) => {
+      const parsed = startArgs(args);
+      await notifyResult({ ...ctx, cwd: targetCwd(ctx.cwd, parsed.cwd) }, "turnlog status", ["status"]);
     },
   });
 
@@ -322,12 +337,13 @@ export default function (pi: ExtensionAPI) {
     description: "Initialize if needed and start a new turnlog session",
     handler: async (args, ctx) => {
       const parsed = startArgs(args);
-      if (!parsed.goal) throw new Error('Usage: /turnlog-start --goal "..." [--ticket ...]');
-      const initialized = await initTurnlog(ctx.cwd);
+      if (!parsed.goal) throw new Error('Usage: /turnlog-start --goal "..." [--ticket ...] [--cwd /path/to/repo]');
+      const cwd = targetCwd(ctx.cwd, parsed.cwd);
+      const initialized = await initTurnlog(cwd);
       ctx.ui.notify(["turnlog init:", initialized.output, ...(initialized.ignored ? ["added .turnlog/ to .gitignore"] : [])].join("\n"), "info");
       const start = ["start", "--goal", parsed.goal];
       if (parsed.ticket) start.push("--ticket", parsed.ticket);
-      await notifyResult(ctx, "turnlog start", start);
+      await notifyResult({ ...ctx, cwd }, "turnlog start", start);
     },
   });
 
@@ -335,9 +351,10 @@ export default function (pi: ExtensionAPI) {
     description: "Record the latest assistant turn only when repository changes make it meaningful",
     handler: async (args, ctx) => {
       const parsed = recordArgs(args);
-      const initialized = parsed.autoInit ? await ensureInitialized(ctx.cwd) : false;
-      const started = parsed.autoStart ? await ensureActiveSession(ctx.cwd, parsed.goal, parsed.ticket) : undefined;
-      const stdout = await recordIfMeaningful(ctx.cwd, parsed.summary || lastAssistantSummary, { autoInit: false, autoStart: false });
+      const cwd = targetCwd(ctx.cwd, parsed.cwd);
+      const initialized = parsed.autoInit ? await ensureInitialized(cwd) : false;
+      const started = parsed.autoStart ? await ensureActiveSession(cwd, parsed.goal, parsed.ticket) : undefined;
+      const stdout = await recordIfMeaningful(cwd, parsed.summary || lastAssistantSummary, { autoInit: false, autoStart: false });
       ctx.ui.notify([
         "turnlog record:",
         ...(initialized ? ["turnlog initialized"] : []),
@@ -359,9 +376,11 @@ export default function (pi: ExtensionAPI) {
       "Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if .turnlog/ is tracked in that repo, include those changes in the same commit.",
       "Do not record again after push unless committing that follow-up provenance record too.",
       "If turnlog is uninitialized or has no active session, use explicit auto-init/auto-start only for meaningful repo work unless the user forbids persistence.",
+      "When the repository being changed is not Pi's current cwd, pass cwd with the target repo path so turnlog writes there.",
     ],
     parameters: Type.Object({
       action: Type.String({ enum: [...ACTIONS] as string[] }),
+      cwd: Type.Optional(Type.String({ description: "Directory whose repository turnlog should be used instead of Pi's current cwd" })),
       goal: Type.Optional(Type.String()),
       ticket: Type.Optional(Type.String()),
       summary: Type.Optional(Type.String()),
@@ -372,7 +391,7 @@ export default function (pi: ExtensionAPI) {
     }),
     async execute(_id: string, params: ToolParams, _signal: AbortSignal, _update: unknown, ctx: ToolCtx) {
       try {
-        const output = await execute(params, ctx.cwd, lastAssistantSummary, (enabled) => (autoRecordEnabled = enabled));
+        const output = await execute(params, targetCwd(ctx.cwd, params.cwd), lastAssistantSummary, (enabled) => (autoRecordEnabled = enabled));
         return text(output, { action: params.action });
       } catch (error) {
         return text(error instanceof Error ? error.message : String(error), { code: 2 });
