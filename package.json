@@ -1,6 +1,6 @@
 {
   "name": "pi-turnlog",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": false,
   "type": "module",
   "description": "Compact Pi extension for recording turnlog provenance with low prompt overhead.",

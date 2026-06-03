@@ -63,6 +63,16 @@ function resolveTurnlogBin(): string {
   return process.env.TURNLOG_BIN?.trim() || "turnlog";
 }
 
+function missingTurnlogMessage(bin = resolveTurnlogBin()): string {
+  return [
+    `turnlog CLI not found: ${bin}`,
+    "Install it with:",
+    "  cargo install turnlog",
+    "or set TURNLOG_BIN=/absolute/path/to/turnlog before starting Pi.",
+    "pi-turnlog is a thin Pi extension wrapper and requires the Rust turnlog CLI on PATH.",
+  ].join("\n");
+}
+
 function text(content: string, details: Record<string, unknown> = {}) {
   return { content: [{ type: "text" as const, text: content }], details };
 }
@@ -83,7 +93,10 @@ function runTurnlog(args: string[], cwd?: string): Promise<{ code: number; stdou
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => (stdout += chunk));
     child.stderr.on("data", (chunk) => (stderr += chunk));
-    child.on("error", reject);
+    child.on("error", (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") reject(new Error(missingTurnlogMessage()));
+      else reject(error);
+    });
     child.on("close", (code) => resolve({ code: code ?? 1, stdout, stderr }));
   });
 }
