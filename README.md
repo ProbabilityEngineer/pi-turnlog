@@ -6,9 +6,31 @@ Pi extension layer for `turnlog`.
 
 Provide a thin Pi-facing wrapper around the `turnlog` CLI for durable session and turn provenance.
 
-## Local usage
+## Install
 
-Copy or symlink the installed package into Pi, then reload Pi.
+Install the Rust CLI first:
+
+```bash
+cargo install turnlog
+```
+
+Then install the Pi extension:
+
+```bash
+pi install npm:pi-turnlog
+```
+
+From GitHub:
+
+```bash
+pi install git:github.com/ProbabilityEngineer/pi-turnlog
+```
+
+For local testing:
+
+```bash
+pi -e ./index.ts
+```
 
 ## Commands
 

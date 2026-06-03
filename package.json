@@ -1,10 +1,27 @@
 {
   "name": "pi-turnlog",
-  "private": true,
+  "version": "0.1.0",
+  "private": false,
   "type": "module",
+  "description": "Compact Pi extension for recording turnlog provenance with low prompt overhead.",
+  "main": "index.ts",
+  "license": "MIT",
+  "author": "ProbabilityEngineer",
+  "homepage": "https://github.com/ProbabilityEngineer/pi-turnlog#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ProbabilityEngineer/pi-turnlog.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ProbabilityEngineer/pi-turnlog/issues"
+  },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.75.4",
     "typebox": "latest"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
   },
   "pi": {
     "extensions": [
@@ -16,5 +33,20 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.1"
-  }
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "turnlog",
+    "provenance",
+    "session",
+    "trace"
+  ],
+  "files": [
+    "index.ts",
+    "README.md",
+    "LICENSE",
+    "tsconfig.json"
+  ]
 }
