@@ -243,9 +243,15 @@ async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = 
     return runCli(args, cwd);
   }
   if (params.action === "record") {
-    const initialized = params.autoInit ? await ensureInitialized(cwd) : false;
-    const started = params.autoStart ? await ensureActiveSession(cwd, params.goal, params.ticket) : undefined;
-    const recorded = await recordIfMeaningful(cwd, params.summary?.trim() || lastAssistantSummary, { autoInit: false, autoStart: false });
+    const summary = params.summary?.trim() || lastAssistantSummary;
+    if (!summary.trim()) return "No assistant summary available; nothing recorded.";
+    const initialized = params.autoInit === false ? false : await ensureInitialized(cwd);
+    if (!(await hasMeaningfulTurn(cwd))) return [
+      ...(initialized ? ["turnlog initialized"] : []),
+      "No meaningful repository change detected; nothing recorded.",
+    ].join("\n");
+    const started = params.autoStart === false ? undefined : await ensureActiveSession(cwd, params.goal, params.ticket);
+    const recorded = await runCli(["record", "--summary", summary], cwd);
     return [
       ...(initialized ? ["turnlog initialized"] : []),
       ...(started ? [`turnlog session started:\n${started}`] : []),
@@ -286,8 +292,8 @@ function recordArgs(raw: string): { summary?: string; goal?: string; ticket?: st
   let goal: string | undefined;
   let ticket: string | undefined;
   let cwd: string | undefined;
-  let autoInit = false;
-  let autoStart = false;
+  let autoInit = true;
+  let autoStart = true;
   const positional: string[] = [];
   for (let i = 0; i < args.length; i += 1) {
     const value = args[i];
@@ -296,7 +302,9 @@ function recordArgs(raw: string): { summary?: string; goal?: string; ticket?: st
     else if (value === "--ticket") ticket = args[++i];
     else if (value === "--cwd" || value === "-C") cwd = args[++i];
     else if (value === "--auto-init") autoInit = true;
+    else if (value === "--no-auto-init") autoInit = false;
     else if (value === "--auto-start") autoStart = true;
+    else if (value === "--no-auto-start") autoStart = false;
     else positional.push(value);
   }
   if (!summary && positional.length) summary = positional.join(" ");
@@ -365,9 +373,18 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       const parsed = recordArgs(args);
       const cwd = targetCwd(ctx.cwd, parsed.cwd);
+      const summary = parsed.summary || lastAssistantSummary;
       const initialized = parsed.autoInit ? await ensureInitialized(cwd) : false;
-      const started = parsed.autoStart ? await ensureActiveSession(cwd, parsed.goal, parsed.ticket) : undefined;
-      const stdout = await recordIfMeaningful(cwd, parsed.summary || lastAssistantSummary, { autoInit: false, autoStart: false });
+      let started: string | undefined;
+      let stdout: string;
+      if (!summary.trim()) {
+        stdout = "No assistant summary available; nothing recorded.";
+      } else if (!(await hasMeaningfulTurn(cwd))) {
+        stdout = "No meaningful repository change detected; nothing recorded.";
+      } else {
+        started = parsed.autoStart ? await ensureActiveSession(cwd, parsed.goal, parsed.ticket) : undefined;
+        stdout = await runCli(["record", "--summary", summary], cwd);
+      }
       ctx.ui.notify([
         "turnlog record:",
         ...(initialized ? ["turnlog initialized"] : []),
@@ -388,7 +405,7 @@ export default function (pi: ExtensionAPI) {
       "Do not record routine chat-only turns.",
       "Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if .turnlog/ is tracked in that repo, include those changes in the same commit.",
       "Do not record again after push unless committing that follow-up provenance record too.",
-      "If turnlog is uninitialized or has no active session, use explicit auto-init/auto-start only for meaningful repo work unless the user forbids persistence.",
+      "If record finds turnlog uninitialized, initialize it; auto-start a session for meaningful repo work unless the user forbids persistence.",
       "When the repository being changed is not Pi's current cwd, pass cwd with the target repo path so turnlog writes there.",
     ],
     parameters: Type.Object({

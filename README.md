@@ -48,7 +48,7 @@ One compact model-visible tool:
 turnlog action: status/init/start/record/report/auto [cwd=/path/to/repo]
 ```
 
-Use the tool when the user wants durable provenance, handoff records, or a session report. Agents should also use it proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context. Do not record routine chat-only turns. Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if `.turnlog/` is tracked in that repo, include those changes in the same commit. Do not record again after push unless committing that follow-up provenance record too. If turnlog is uninitialized or has no active session, use explicit auto-init/auto-start only for meaningful repo work unless the user forbids persistence.
+Use the tool when the user wants durable provenance, handoff records, or a session report. Agents should also use it proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context. Do not record routine chat-only turns. Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if `.turnlog/` is tracked in that repo, include those changes in the same commit. Do not record again after push unless committing that follow-up provenance record too. If a record attempt finds turnlog uninitialized, initialize it; auto-start a session for meaningful repo work unless the user forbids persistence.
 
 ## Missing CLI behavior
 
@@ -74,5 +74,5 @@ TURNLOG_BIN=/absolute/path/to/turnlog pi
 - auto-record automatically initializes turnlog and starts a conservative session when meaningful repository changes exist in Pi's current cwd
 - auto-record and `/turnlog-record` skip chat-only turns when no repository change is detected
 - `turnlog init` through this extension adds `.turnlog/` to `.gitignore` so local provenance is not pushed to GitHub by default
-- `/turnlog-record --auto-init --auto-start --goal "..." --summary "..."` can initialize turnlog and start a session before recording; without those flags, failures remain explicit
+- `/turnlog-record --goal "..." --summary "..."` initializes turnlog and starts a session when needed before recording meaningful repo changes; use `--no-auto-init` or `--no-auto-start` only when explicitly desired
 - source entrypoint is `index.ts`
