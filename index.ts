@@ -4,7 +4,8 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-const ACTIONS = ["status", "init", "start", "record", "report", "auto"] as const;
+const ACTIONS = ["status", "init", "start", "record", "repair", "report", "auto"] as const;
+const mutationQueues = new Map<string, Promise<void>>();
 type TurnlogAction = (typeof ACTIONS)[number];
 
 type ToolParams = {
@@ -84,6 +85,18 @@ function targetCwd(cwd?: string, requested?: string): string | undefined {
   return resolve(cwd || process.cwd(), raw);
 }
 
+function serializeMutation<T>(cwd: string | undefined, operation: () => Promise<T>): Promise<T> {
+  const key = cwd || process.cwd();
+  const previous = mutationQueues.get(key) || Promise.resolve();
+  const result = previous.then(operation, operation);
+  const settled = result.then(() => undefined, () => undefined);
+  mutationQueues.set(key, settled);
+  void settled.then(() => {
+    if (mutationQueues.get(key) === settled) mutationQueues.delete(key);
+  });
+  return result;
+}
+
 function runTurnlog(args: string[], cwd?: string): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
     const child = spawn(resolveTurnlogBin(), args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
@@ -106,7 +119,7 @@ async function runCli(args: string[], cwd?: string) {
   const stdout = result.stdout.trim();
   const stderr = result.stderr.trim();
   if (result.code !== 0) throw new Error(stderr || `turnlog ${args[0]} failed with exit code ${result.code}`);
-  return stdout || stderr || `turnlog ${args[0]} ok`;
+  return [stdout, stderr].filter(Boolean).join("\n") || `turnlog ${args[0]} ok`;
 }
 
 async function notifyResult(ctx: any, label: string, args: string[]) {
@@ -230,19 +243,19 @@ async function recordIfMeaningful(cwd: string | undefined, summary: string, opti
 
 async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = "", setAuto?: (enabled: boolean) => boolean) {
   if (params.action === "status") return runCli(["status"], cwd);
-  if (params.action === "init") {
+  if (params.action === "init") return serializeMutation(cwd, async () => {
     const result = await initTurnlog(cwd);
     return [result.output, ...(result.ignored ? ["added .turnlog/ to .gitignore"] : [])].join("\n");
-  }
-  if (params.action === "start") {
+  });
+  if (params.action === "start") return serializeMutation(cwd, async () => {
     const goal = params.goal?.trim();
     if (!goal) throw new Error("goal is required for turnlog start");
     await ensureInitialized(cwd);
     const args = ["start", "--goal", goal];
     if (params.ticket?.trim()) args.push("--ticket", params.ticket.trim());
     return runCli(args, cwd);
-  }
-  if (params.action === "record") {
+  });
+  if (params.action === "record") return serializeMutation(cwd, async () => {
     const summary = params.summary?.trim() || lastAssistantSummary;
     if (!summary.trim()) return "No assistant summary available; nothing recorded.";
     const initialized = params.autoInit === false ? false : await ensureInitialized(cwd);
@@ -257,11 +270,12 @@ async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = 
       ...(started ? [`turnlog session started:\n${started}`] : []),
       recorded,
     ].join("\n");
-  }
-  if (params.action === "report") {
+  });
+  if (params.action === "repair") return serializeMutation(cwd, () => runCli(["repair"], cwd));
+  if (params.action === "report") return serializeMutation(cwd, () => {
     if (!params.id?.trim()) throw new Error("id is required for turnlog report");
     return runCli(["report", params.id.trim(), "--stdout"], cwd);
-  }
+  });
   if (params.action === "auto") {
     if (!setAuto) throw new Error("auto control unavailable");
     const enabled = setAuto(params.enabled ?? true);
@@ -334,11 +348,11 @@ export default function (pi: ExtensionAPI) {
     recordedTurnKeys.add(messageKey);
 
     try {
-      const stdout = await recordIfMeaningful(ctx.cwd, summary, {
+      const stdout = await serializeMutation(ctx.cwd, () => recordIfMeaningful(ctx.cwd, summary, {
         autoInit: true,
         autoStart: true,
         goal: "Automatic Pi turn provenance",
-      });
+      }));
       if (stdout.startsWith("No meaningful repository change detected")) return;
       ctx.ui.notify(`turnlog auto-record:\n${stdout}`, "info");
     } catch (error) {
@@ -359,12 +373,15 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       const parsed = startArgs(args);
       if (!parsed.goal) throw new Error('Usage: /turnlog-start --goal "..." [--ticket ...] [--cwd /path/to/repo]');
+      const goal = parsed.goal;
       const cwd = targetCwd(ctx.cwd, parsed.cwd);
-      const initialized = await initTurnlog(cwd);
-      ctx.ui.notify(["turnlog init:", initialized.output, ...(initialized.ignored ? ["added .turnlog/ to .gitignore"] : [])].join("\n"), "info");
-      const start = ["start", "--goal", parsed.goal];
-      if (parsed.ticket) start.push("--ticket", parsed.ticket);
-      await notifyResult({ ...ctx, cwd }, "turnlog start", start);
+      await serializeMutation(cwd, async () => {
+        const initialized = await initTurnlog(cwd);
+        ctx.ui.notify(["turnlog init:", initialized.output, ...(initialized.ignored ? ["added .turnlog/ to .gitignore"] : [])].join("\n"), "info");
+        const start = ["start", "--goal", goal];
+        if (parsed.ticket) start.push("--ticket", parsed.ticket);
+        await notifyResult({ ...ctx, cwd }, "turnlog start", start);
+      });
     },
   });
 
@@ -373,34 +390,45 @@ export default function (pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       const parsed = recordArgs(args);
       const cwd = targetCwd(ctx.cwd, parsed.cwd);
-      const summary = parsed.summary || lastAssistantSummary;
-      const initialized = parsed.autoInit ? await ensureInitialized(cwd) : false;
-      let started: string | undefined;
-      let stdout: string;
-      if (!summary.trim()) {
-        stdout = "No assistant summary available; nothing recorded.";
-      } else if (!(await hasMeaningfulTurn(cwd))) {
-        stdout = "No meaningful repository change detected; nothing recorded.";
-      } else {
-        started = parsed.autoStart ? await ensureActiveSession(cwd, parsed.goal, parsed.ticket) : undefined;
-        stdout = await runCli(["record", "--summary", summary], cwd);
-      }
-      ctx.ui.notify([
-        "turnlog record:",
-        ...(initialized ? ["turnlog initialized"] : []),
-        ...(started ? [`turnlog session started:\n${started}`] : []),
-        stdout,
-      ].join("\n"), "info");
+      await serializeMutation(cwd, async () => {
+        const summary = parsed.summary || lastAssistantSummary;
+        const initialized = parsed.autoInit ? await ensureInitialized(cwd) : false;
+        let started: string | undefined;
+        let stdout: string;
+        if (!summary.trim()) {
+          stdout = "No assistant summary available; nothing recorded.";
+        } else if (!(await hasMeaningfulTurn(cwd))) {
+          stdout = "No meaningful repository change detected; nothing recorded.";
+        } else {
+          started = parsed.autoStart ? await ensureActiveSession(cwd, parsed.goal, parsed.ticket) : undefined;
+          stdout = await runCli(["record", "--summary", summary], cwd);
+        }
+        ctx.ui.notify([
+          "turnlog record:",
+          ...(initialized ? ["turnlog initialized"] : []),
+          ...(started ? [`turnlog session started:\n${started}`] : []),
+          stdout,
+        ].join("\n"), "info");
+      });
+    },
+  });
+
+  pi.registerCommand("turnlog-repair", {
+    description: "Rebuild the turnlog index from canonical session and turn records",
+    handler: async (args, ctx) => {
+      const parsed = startArgs(args);
+      const cwd = targetCwd(ctx.cwd, parsed.cwd);
+      await serializeMutation(cwd, () => notifyResult({ ...ctx, cwd }, "turnlog repair", ["repair"]));
     },
   });
 
   pi.registerTool({
     name: "turnlog",
     label: "Turnlog",
-    description: "Compact turn/session provenance tool: status/init/start/record/report/auto.",
+    description: "Compact turn/session provenance tool: status/init/start/record/repair/report/auto.",
     promptSnippet: "Turnlog routing: use turnlog proactively for meaningful repository work; record only meaningful assistant turns with repository changes.",
     promptGuidelines: [
-      "Use turnlog status/init/start/record/report/auto when the user wants durable provenance or handoff records.",
+      "Use turnlog status/init/start/record/repair/report/auto when the user wants durable provenance, recovery, or a session report.",
       "Use turnlog proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context.",
       "Do not record routine chat-only turns.",
       "Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if .turnlog/ is tracked in that repo, include those changes in the same commit.",
