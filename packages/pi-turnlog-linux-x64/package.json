@@ -1,6 +1,6 @@
 {
   "name": "pi-turnlog-linux-x64",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Bundled turnlog CLI for Linux x64",
   "license": "MIT",
   "os": ["linux"],
