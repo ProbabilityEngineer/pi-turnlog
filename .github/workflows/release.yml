@@ -1,0 +1,123 @@
+name: Release pi-turnlog
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version already present in package.json"
+        required: true
+        default: "0.4.0"
+      cli_ref:
+        description: "turnlog CLI git ref to build"
+        required: true
+        default: "main"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: pi-turnlog-darwin-arm64
+            runner: macos-14
+            target: aarch64-apple-darwin
+          - name: pi-turnlog-darwin-x64
+            runner: macos-13
+            target: x86_64-apple-darwin
+          - name: pi-turnlog-linux-arm64
+            runner: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+          - name: pi-turnlog-linux-x64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Checkout turnlog CLI
+        uses: actions/checkout@v4
+        with:
+          repository: ProbabilityEngineer/turnlog
+          ref: ${{ inputs.cli_ref }}
+          path: turnlog-cli
+      - name: Build native target
+        if: runner.os == 'macOS'
+        working-directory: turnlog-cli
+        run: cargo build --release --target "${{ matrix.target }}"
+      - name: Install cross
+        if: runner.os == 'Linux'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+      - name: Build Linux target
+        if: runner.os == 'Linux'
+        working-directory: turnlog-cli
+        run: cross build --release --target "${{ matrix.target }}"
+      - name: Smoke test binary
+        working-directory: turnlog-cli
+        run: |
+          test -x "target/${{ matrix.target }}/release/turnlog"
+          "target/${{ matrix.target }}/release/turnlog" --version
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: turnlog-cli/target/${{ matrix.target }}/release/turnlog
+          if-no-files-found: error
+
+  publish:
+    name: Publish packages and tag release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Prepare platform packages
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          for name in pi-turnlog-darwin-arm64 pi-turnlog-darwin-x64 pi-turnlog-linux-arm64 pi-turnlog-linux-x64; do
+            mkdir -p "packages/$name/bin"
+            cp "artifacts/$name/turnlog" "packages/$name/bin/turnlog"
+            chmod 755 "packages/$name/bin/turnlog"
+            node -e 'const fs=require("fs"); const p=process.argv[1]; const j=JSON.parse(fs.readFileSync(p)); j.version=process.env.VERSION; fs.writeFileSync(p, JSON.stringify(j,null,2)+"\n")' "packages/$name/package.json"
+          done
+      - name: Validate package versions
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          test "$(node -p 'require("./package.json").version')" = "$VERSION"
+          for package in packages/*/package.json; do test "$(node -p 'require("./'$package'").version')" = "$VERSION"; done
+          npm install --ignore-scripts --no-package-lock
+          npm run lint
+          npm pack --dry-run
+      - name: Publish platform packages first
+        run: |
+          for package in packages/*; do npm publish "$package" --access public --provenance; done
+      - name: Publish main package
+        run: npm publish --access public --provenance
+      - name: Tag and push after successful publication
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git tag -a "v$VERSION" -m "pi-turnlog $VERSION"
+          git push origin "v$VERSION"

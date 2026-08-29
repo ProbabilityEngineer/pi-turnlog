@@ -1,24 +1,10 @@
-name: Publish Package
+# Publishing is handled by release.yml, which builds platform binaries and tags only
+# after all npm packages have been published successfully.
+name: Legacy publish placeholder
 
 on:
-  push:
-    tags:
-      - 'v*'
-
-permissions:
-  contents: read
-  id-token: write
-
-jobs:
-  publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-          registry-url: 'https://registry.npmjs.org'
-          package-manager-cache: false
-      - run: npm ci
-      - run: npm run lint --if-present
-      - run: npm publish --access public --provenance
+  workflow_dispatch:
+    inputs:
+      note:
+        description: "No-op compatibility workflow"
+        required: false

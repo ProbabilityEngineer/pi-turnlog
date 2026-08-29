@@ -1,11 +1,25 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
 const ACTIONS = ["status", "init", "start", "record", "repair", "log", "grep", "show", "report", "auto"] as const;
 const mutationQueues = new Map<string, Promise<void>>();
+const require = createRequire(import.meta.url);
+
+function bundledTurnlogBin(): string | undefined {
+  const platform = `${process.platform}-${process.arch}`;
+  const packageName = ({
+    "darwin-arm64": "pi-turnlog-darwin-arm64",
+    "darwin-x64": "pi-turnlog-darwin-x64",
+    "linux-arm64": "pi-turnlog-linux-arm64",
+    "linux-x64": "pi-turnlog-linux-x64",
+  } as Record<string, string>)[platform];
+  if (!packageName) return undefined;
+  try { return require.resolve(`${packageName}/bin/turnlog`); } catch { return undefined; }
+}
 type TurnlogAction = (typeof ACTIONS)[number];
 
 type ToolParams = {
@@ -64,7 +78,7 @@ function parseArgs(input: string): string[] {
 }
 
 function resolveTurnlogBin(): string {
-  return process.env.TURNLOG_BIN?.trim() || "turnlog";
+  return process.env.TURNLOG_BIN?.trim() || bundledTurnlogBin() || "turnlog";
 }
 
 function missingTurnlogMessage(bin = resolveTurnlogBin()): string {
@@ -73,7 +87,7 @@ function missingTurnlogMessage(bin = resolveTurnlogBin()): string {
     "Install it with:",
     "  cargo install turnlog",
     "or set TURNLOG_BIN=/absolute/path/to/turnlog before starting Pi.",
-    "pi-turnlog is a thin Pi extension wrapper and requires the Rust turnlog CLI on PATH.",
+    "Supported npm installs bundle turnlog for macOS/Linux on arm64/x64; this is a PATH fallback message.",
   ].join("\n");
 }
 
