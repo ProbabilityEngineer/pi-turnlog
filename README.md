@@ -87,3 +87,4 @@ TURNLOG_BIN=/absolute/path/to/turnlog pi
 - `/turnlog-record --goal "..." --summary "..."` initializes turnlog and starts a session when needed before recording meaningful repo changes; use `--no-auto-init` or `--no-auto-start` only when explicitly desired
 - source entrypoint is `index.ts`
 - releases are built by `.github/workflows/release.yml`; run it manually with the version already in `package.json`, then it publishes platform packages, publishes `pi-turnlog`, and creates the Git tag only after all publication steps succeed
+- because the CLI repository is private, configure a GitHub Actions secret named `TURNLOG_REPO_TOKEN` with read access to `ProbabilityEngineer/turnlog` before running the release workflow
