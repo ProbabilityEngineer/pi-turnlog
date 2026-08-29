@@ -6,7 +6,7 @@ on:
       version:
         description: "Release version already present in package.json"
         required: true
-        default: "0.4.1"
+        default: "0.4.2"
       cli_ref:
         description: "turnlog CLI git ref to build"
         required: true
@@ -60,13 +60,17 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: turnlog-cli
         run: cross build --release --target "${{ matrix.target }}"
-      - name: Smoke test binary
+      - name: Validate binary artifact
         working-directory: turnlog-cli
         run: |
           test -x "target/${{ matrix.target }}/release/turnlog"
-          "target/${{ matrix.target }}/release/turnlog" --version
+          file "target/${{ matrix.target }}/release/turnlog"
+      - name: Smoke test native binary
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        working-directory: turnlog-cli
+        run: "target/${{ matrix.target }}/release/turnlog --version"
       - name: Upload binary
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.name }}
           path: turnlog-cli/target/${{ matrix.target }}/release/turnlog
@@ -85,7 +89,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           path: artifacts
       - name: Prepare platform packages

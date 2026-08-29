@@ -20,3 +20,9 @@ Use tagged releases or workflow dispatch with Rust target builds, executable smo
 
 Workflow builds all four targets, validates binaries, publishes platform packages before main package, and documents required npm/GitHub secrets and release steps.
 
+
+## Notes
+
+**2026-08-29T18:05:42Z**
+
+0.4.1 run exposed two workflow issues: empty token input after CLI became public and foreign arm64 execution exit 126. Follow-up 0.4.2 removes token, skips execution for Linux arm64, validates with file, and upgrades artifact actions to v5.
