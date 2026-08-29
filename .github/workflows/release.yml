@@ -6,7 +6,7 @@ on:
       version:
         description: "Release version already present in package.json"
         required: true
-        default: "0.4.3"
+        default: "0.4.4"
       cli_ref:
         description: "turnlog CLI git ref to build"
         required: true
@@ -89,7 +89,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - uses: actions/download-artifact@v6
+      - uses: actions/download-artifact@v7
         with:
           path: artifacts
       - name: Prepare platform packages
@@ -113,10 +113,17 @@ jobs:
           npm run lint
           npm pack --dry-run
       - name: Publish platform packages first
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          if [ -n "$NPM_TOKEN" ]; then export NODE_AUTH_TOKEN="$NPM_TOKEN"; fi
           for package in packages/*; do npm publish "./$package" --access public --provenance; done
       - name: Publish main package
-        run: npm publish --access public --provenance
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then export NODE_AUTH_TOKEN="$NPM_TOKEN"; fi
+          npm publish --access public --provenance
       - name: Tag and push after successful publication
         env:
           VERSION: ${{ inputs.version }}

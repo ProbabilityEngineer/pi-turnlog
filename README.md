@@ -56,6 +56,10 @@ turnlog action: status/init/start/record/repair/log/grep/show/report/auto [cwd=/
 
 Use the tool when the user wants durable provenance, handoff records, or a session report. Agents should also use it proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context. Do not record routine chat-only turns. Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if `.turnlog/` is tracked in that repo, include those changes in the same commit. Do not record again after push unless committing that follow-up provenance record too. If a record attempt finds turnlog uninitialized, initialize it; auto-start a session for meaningful repo work unless the user forbids persistence. If the CLI reports a malformed or incomplete index, use `turnlog action=repair` or `/turnlog-repair` before attempting another write. Before substantial continuation work in an initialized repo, start with status and retrieve history with `log`, `grep`, or `show` only when prior decisions, validation, or handoff context is relevant.
 
+## Release bootstrap
+
+The four platform packages must exist on npm before their individual trusted-publisher settings can be configured. For the first `0.4.4` run, create a granular npm access token with publish permission, add it to the GitHub repository as `NPM_TOKEN`, and run the release workflow. Then configure GitHub Actions trusted publishing for all four platform packages and `pi-turnlog`, remove `NPM_TOKEN`, and use OIDC for subsequent releases.
+
 ## Bundled CLI behavior
 
 The npm package includes platform-specific optional packages for macOS and Linux on arm64 and x64. The extension selects the matching bundled executable automatically. `TURNLOG_BIN` overrides it, and a `turnlog` executable on `PATH` is the final fallback.
@@ -87,4 +91,4 @@ TURNLOG_BIN=/absolute/path/to/turnlog pi
 - `/turnlog-record --goal "..." --summary "..."` initializes turnlog and starts a session when needed before recording meaningful repo changes; use `--no-auto-init` or `--no-auto-start` only when explicitly desired
 - source entrypoint is `index.ts`
 - releases are built by `.github/workflows/release.yml`; run it manually with the version already in `package.json`, then it publishes platform packages, publishes `pi-turnlog`, and creates the Git tag only after all publication steps succeed
-- the release workflow clones the public `ProbabilityEngineer/turnlog` repository; if that repository becomes private again, add a `TURNLOG_REPO_TOKEN` GitHub Actions secret with read access
+- the release workflow clones the public `ProbabilityEngineer/turnlog` repository; the first publication of the four new platform packages may require an `NPM_TOKEN` GitHub Actions secret because npm trusted publishers must be configured per existing package. After bootstrap, configure OIDC trusted publishing for each package and remove the token
