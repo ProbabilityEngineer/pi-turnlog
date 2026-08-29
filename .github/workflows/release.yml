@@ -6,7 +6,7 @@ on:
       version:
         description: "Release version already present in package.json"
         required: true
-        default: "0.4.4"
+        default: "0.4.5"
       cli_ref:
         description: "turnlog CLI git ref to build"
         required: true

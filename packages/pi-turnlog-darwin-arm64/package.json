@@ -1,8 +1,9 @@
 {
   "name": "pi-turnlog-darwin-arm64",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Bundled turnlog CLI for macOS arm64",
   "license": "MIT",
+  "repository": "https://github.com/ProbabilityEngineer/pi-turnlog",
   "os": ["darwin"],
   "cpu": ["arm64"],
   "files": ["bin/turnlog"]
