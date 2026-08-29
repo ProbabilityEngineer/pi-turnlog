@@ -1,6 +1,6 @@
 {
   "name": "pi-turnlog",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": false,
   "type": "module",
   "description": "Compact Pi extension for recording turnlog provenance with low prompt overhead.",
@@ -20,10 +20,10 @@
     "typebox": "latest"
   },
   "optionalDependencies": {
-    "pi-turnlog-darwin-arm64": "0.4.2",
-    "pi-turnlog-darwin-x64": "0.4.2",
-    "pi-turnlog-linux-arm64": "0.4.2",
-    "pi-turnlog-linux-x64": "0.4.2"
+    "pi-turnlog-darwin-arm64": "0.4.3",
+    "pi-turnlog-darwin-x64": "0.4.3",
+    "pi-turnlog-linux-arm64": "0.4.3",
+    "pi-turnlog-linux-x64": "0.4.3"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

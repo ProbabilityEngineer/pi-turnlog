@@ -6,7 +6,7 @@ on:
       version:
         description: "Release version already present in package.json"
         required: true
-        default: "0.4.2"
+        default: "0.4.3"
       cli_ref:
         description: "turnlog CLI git ref to build"
         required: true
@@ -70,7 +70,7 @@ jobs:
         working-directory: turnlog-cli
         run: "target/${{ matrix.target }}/release/turnlog --version"
       - name: Upload binary
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.name }}
           path: turnlog-cli/target/${{ matrix.target }}/release/turnlog
@@ -89,7 +89,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v6
         with:
           path: artifacts
       - name: Prepare platform packages
@@ -114,7 +114,7 @@ jobs:
           npm pack --dry-run
       - name: Publish platform packages first
         run: |
-          for package in packages/*; do npm publish "$package" --access public --provenance; done
+          for package in packages/*; do npm publish "./$package" --access public --provenance; done
       - name: Publish main package
         run: npm publish --access public --provenance
       - name: Tag and push after successful publication
