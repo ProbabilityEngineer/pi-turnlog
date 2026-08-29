@@ -42,16 +42,19 @@ The slash-command surface is intentionally compact:
 - `/turnlog-start --goal "..." [--ticket ...] [--cwd /path/to/repo]` — initialize `.turnlog/` if needed and start a new session.
 - `/turnlog-record [--summary "..."] [--auto-init] [--auto-start] [--goal "..."] [--cwd /path/to/repo]` — record the latest assistant turn only when repository changes make it meaningful.
 - `/turnlog-repair [--cwd /path/to/repo]` — rebuild a damaged index from canonical session and turn records.
+- `/turnlog-log [--session ID] [--ticket ID] [--grep TEXT] [--changed PATH] [--cwd /path/to/repo]` — list relevant history.
+- `/turnlog-grep "TEXT" [--cwd /path/to/repo]` — search prior sessions and turns.
+- `/turnlog-show <session-or-turn-id> [--cwd /path/to/repo]` — inspect one prior record.
 
 ## Tool
 
 One compact model-visible tool:
 
 ```text
-turnlog action: status/init/start/record/repair/report/auto [cwd=/path/to/repo]
+turnlog action: status/init/start/record/repair/log/grep/show/report/auto [cwd=/path/to/repo]
 ```
 
-Use the tool when the user wants durable provenance, handoff records, or a session report. Agents should also use it proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context. Do not record routine chat-only turns. Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if `.turnlog/` is tracked in that repo, include those changes in the same commit. Do not record again after push unless committing that follow-up provenance record too. If a record attempt finds turnlog uninitialized, initialize it; auto-start a session for meaningful repo work unless the user forbids persistence. If the CLI reports a malformed or incomplete index, use `turnlog action=repair` or `/turnlog-repair` before attempting another write.
+Use the tool when the user wants durable provenance, handoff records, or a session report. Agents should also use it proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context. Do not record routine chat-only turns. Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if `.turnlog/` is tracked in that repo, include those changes in the same commit. Do not record again after push unless committing that follow-up provenance record too. If a record attempt finds turnlog uninitialized, initialize it; auto-start a session for meaningful repo work unless the user forbids persistence. If the CLI reports a malformed or incomplete index, use `turnlog action=repair` or `/turnlog-repair` before attempting another write. Before substantial continuation work in an initialized repo, start with status and retrieve history with `log`, `grep`, or `show` only when prior decisions, validation, or handoff context is relevant.
 
 ## Missing CLI behavior
 

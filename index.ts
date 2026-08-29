@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-const ACTIONS = ["status", "init", "start", "record", "repair", "report", "auto"] as const;
+const ACTIONS = ["status", "init", "start", "record", "repair", "log", "grep", "show", "report", "auto"] as const;
 const mutationQueues = new Map<string, Promise<void>>();
 type TurnlogAction = (typeof ACTIONS)[number];
 
@@ -14,6 +14,9 @@ type ToolParams = {
   ticket?: string;
   summary?: string;
   id?: string;
+  pattern?: string;
+  session?: string;
+  changed?: string;
   enabled?: boolean;
   autoInit?: boolean;
   autoStart?: boolean;
@@ -272,6 +275,23 @@ async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = 
     ].join("\n");
   });
   if (params.action === "repair") return serializeMutation(cwd, () => runCli(["repair"], cwd));
+  if (params.action === "log") {
+    const args = ["log"];
+    if (params.session?.trim()) args.push("--session", params.session.trim());
+    if (params.ticket?.trim()) args.push("--ticket", params.ticket.trim());
+    if (params.pattern?.trim()) args.push("--grep", params.pattern.trim());
+    if (params.changed?.trim()) args.push("--changed", params.changed.trim());
+    return runCli(args, cwd);
+  }
+  if (params.action === "grep") {
+    const pattern = params.pattern?.trim();
+    if (!pattern) throw new Error("pattern is required for turnlog grep");
+    return runCli(["grep", pattern], cwd);
+  }
+  if (params.action === "show") {
+    if (!params.id?.trim()) throw new Error("id is required for turnlog show");
+    return runCli(["show", params.id.trim()], cwd);
+  }
   if (params.action === "report") return serializeMutation(cwd, () => {
     if (!params.id?.trim()) throw new Error("id is required for turnlog report");
     return runCli(["report", params.id.trim(), "--stdout"], cwd);
@@ -298,6 +318,30 @@ function startArgs(raw: string): { goal?: string; ticket?: string; cwd?: string 
   }
   if (!goal && positional.length) goal = positional.join(" ");
   return { goal, ticket, cwd };
+}
+
+function historyArgs(raw: string): { id?: string; pattern?: string; session?: string; ticket?: string; changed?: string; cwd?: string } {
+  const args = parseArgs(raw);
+  let id: string | undefined;
+  let pattern: string | undefined;
+  let session: string | undefined;
+  let ticket: string | undefined;
+  let changed: string | undefined;
+  let cwd: string | undefined;
+  const positional: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const value = args[i];
+    if (value === "--id") id = args[++i];
+    else if (value === "--pattern" || value === "--grep") pattern = args[++i];
+    else if (value === "--session") session = args[++i];
+    else if (value === "--ticket") ticket = args[++i];
+    else if (value === "--changed") changed = args[++i];
+    else if (value === "--cwd" || value === "-C") cwd = args[++i];
+    else positional.push(value);
+  }
+  if (!id && positional.length) id = positional.join(" ");
+  if (!pattern && positional.length) pattern = positional.join(" ");
+  return { id, pattern, session, ticket, changed, cwd };
 }
 
 function recordArgs(raw: string): { summary?: string; goal?: string; ticket?: string; cwd?: string; autoInit: boolean; autoStart: boolean } {
@@ -422,13 +466,46 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  pi.registerCommand("turnlog-log", {
+    description: "List prior turnlog events; optionally filter by session, ticket, text, or changed file",
+    handler: async (args, ctx) => {
+      const parsed = historyArgs(args);
+      const cwd = targetCwd(ctx.cwd, parsed.cwd);
+      const command = ["log"];
+      if (parsed.session) command.push("--session", parsed.session);
+      if (parsed.ticket) command.push("--ticket", parsed.ticket);
+      if (parsed.pattern) command.push("--grep", parsed.pattern);
+      if (parsed.changed) command.push("--changed", parsed.changed);
+      await notifyResult({ ...ctx, cwd }, "turnlog log", command);
+    },
+  });
+
+  pi.registerCommand("turnlog-grep", {
+    description: "Search prior turnlog events for text",
+    handler: async (args, ctx) => {
+      const parsed = historyArgs(args);
+      if (!parsed.pattern) throw new Error('Usage: /turnlog-grep "..." [--cwd /path/to/repo]');
+      await notifyResult({ ...ctx, cwd: targetCwd(ctx.cwd, parsed.cwd) }, "turnlog grep", ["grep", parsed.pattern]);
+    },
+  });
+
+  pi.registerCommand("turnlog-show", {
+    description: "Show a prior turnlog session or turn by ID",
+    handler: async (args, ctx) => {
+      const parsed = historyArgs(args);
+      if (!parsed.id) throw new Error("Usage: /turnlog-show <session-or-turn-id> [--cwd /path/to/repo]");
+      await notifyResult({ ...ctx, cwd: targetCwd(ctx.cwd, parsed.cwd) }, "turnlog show", ["show", parsed.id]);
+    },
+  });
+
   pi.registerTool({
     name: "turnlog",
     label: "Turnlog",
-    description: "Compact turn/session provenance tool: status/init/start/record/repair/report/auto.",
+    description: "Compact turn/session provenance tool: status/init/start/record/repair/log/grep/show/report/auto.",
     promptSnippet: "Turnlog routing: use turnlog proactively for meaningful repository work; record only meaningful assistant turns with repository changes.",
     promptGuidelines: [
-      "Use turnlog status/init/start/record/repair/report/auto when the user wants durable provenance, recovery, or a session report.",
+      "Use turnlog status/init/start/record/repair/log/grep/show/report/auto when the user wants durable provenance, recovery, history, or a session report.",
+      "Before substantial continuation work in an initialized repo, use status; use log, grep, or show only when prior decisions, validation, or handoff context is relevant.",
       "Use turnlog proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context.",
       "Do not record routine chat-only turns.",
       "Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if .turnlog/ is tracked in that repo, include those changes in the same commit.",
@@ -443,6 +520,9 @@ export default function (pi: ExtensionAPI) {
       ticket: Type.Optional(Type.String()),
       summary: Type.Optional(Type.String()),
       id: Type.Optional(Type.String()),
+      pattern: Type.Optional(Type.String({ description: "Text for grep, or a log --grep filter" })),
+      session: Type.Optional(Type.String({ description: "Session ID for a log filter" })),
+      changed: Type.Optional(Type.String({ description: "Changed-file substring for a log filter" })),
       enabled: Type.Optional(Type.Boolean()),
       autoInit: Type.Optional(Type.Boolean()),
       autoStart: Type.Optional(Type.Boolean()),
