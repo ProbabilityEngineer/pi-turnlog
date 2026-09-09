@@ -2,3 +2,16 @@
 node_modules/
 .turnlog/
 AGENTS.md
+
+# Local agent, task, provenance, VCS, and build state
+.pi/
+.tickets/
+.turnlog/
+.jj/
+.clu/data.sqlite
+.build/
+
+# Local clu database; keep configuration and templates tracked                                                                                 
+.clu/data.sqlite                                                                                                                               
+.clu/data.sqlite-wal                                                                                                                           
+.clu/data.sqlite-shm
