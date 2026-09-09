@@ -6,11 +6,11 @@ on:
       version:
         description: "Release version already present in package.json"
         required: true
-        default: "0.4.7"
+        default: "0.4.8"
       cli_ref:
         description: "turnlog CLI git ref to build"
         required: true
-        default: "main"
+        default: "2476f635d1c476289b8049f19229b8bb802cc590" # turnlog v0.3.1
 
 permissions:
   contents: write
@@ -47,10 +47,14 @@ jobs:
           repository: ProbabilityEngineer/turnlog
           ref: ${{ inputs.cli_ref }}
           path: turnlog-cli
+      - name: Test native CLI (including Git-only JJ trap tests)
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        working-directory: turnlog-cli
+        run: cargo test --locked --target "${{ matrix.target }}"
       - name: Build native target
         if: runner.os == 'macOS'
         working-directory: turnlog-cli
-        run: cargo build --release --target "${{ matrix.target }}"
+        run: cargo build --locked --release --target "${{ matrix.target }}"
       - name: Install cross
         if: runner.os == 'Linux'
         uses: taiki-e/install-action@v2
@@ -59,7 +63,7 @@ jobs:
       - name: Build Linux target
         if: runner.os == 'Linux'
         working-directory: turnlog-cli
-        run: cross build --release --target "${{ matrix.target }}"
+        run: cross build --locked --release --target "${{ matrix.target }}"
       - name: Validate binary artifact
         working-directory: turnlog-cli
         run: |
