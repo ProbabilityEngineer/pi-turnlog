@@ -15,3 +15,8 @@ AGENTS.md
 .clu/data.sqlite                                                                                                                               
 .clu/data.sqlite-wal                                                                                                                           
 .clu/data.sqlite-shm
+
+# CLU shareable configuration and workflow templates remain tracked.
+# CLU local runtime state.
+.clu/*.sqlite*
+.clu/backups/

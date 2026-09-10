@@ -16,10 +16,11 @@
 ## Work tracking
 
 - Use `clu` as the authoritative source of project tasks and work state.
-- For substantial work, run `clu ready`, claim work with context, and read inherited context before editing.
-- Add discovered work and task-specific notes to `clu`; close tasks only after validation.
+- At the start of substantial work, run `clu ready`, then use `clu claim --context` or claim the specifically requested task; read inherited context before editing.
+- Put newly discovered work, notes, and dependencies in `clu`, not Markdown todo lists.
+- Close completed work in `clu` after validation; leave incomplete or blocked work represented there.
 - Use Turnlog separately for decisions, experiments, rationale, and lessons learned.
 
 ## Local state
 
-- Keep `.pi/`, `.clu/`, and `.turnlog/` out of GitHub. They are local agent/task/provenance state.
+- Keep `.pi/`, `.clu/*.sqlite*`, `.clu/backups/`, and `.turnlog/` out of GitHub; commit `.clu/config.yaml` and `.clu/templates/` as shareable workflow configuration.

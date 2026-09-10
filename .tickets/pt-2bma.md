@@ -1,6 +1,6 @@
 ---
 id: pt-2bma
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-08-29T15:48:37Z
