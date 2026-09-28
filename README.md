@@ -72,6 +72,16 @@ The four platform packages must exist on npm before their individual trusted-pub
 
 The npm package includes platform-specific optional packages for macOS and Linux on arm64 and x64. The extension selects the matching bundled executable automatically. `TURNLOG_BIN` overrides it, and a `turnlog` executable on `PATH` is the final fallback.
 
+On a fresh npm install, the matching `pi-turnlog-<platform>` package and its
+`bin/turnlog` executable are installed with `pi-turnlog`. Pi's shared npm
+directory can retain an old lockfile that omits an optional platform package:
+`pi install` may then say "up to date" without restoring it. Check
+`~/.pi/agent/npm/node_modules/pi-turnlog-<platform>/bin/turnlog`; if it is
+missing, repair the shared npm installation with
+`npm install --prefix ~/.pi/agent/npm --include=optional` (or start with a
+fresh Pi npm directory). The release workflow verifies clean npm installs
+and bundled CLI versions on all four supported platforms before tagging.
+
 If the executable is missing, commands and tools print an explicit install hint:
 
 ```bash
@@ -98,5 +108,5 @@ TURNLOG_BIN=/absolute/path/to/turnlog pi
 - `turnlog init` through this extension adds `.turnlog/` to `.gitignore` so local provenance is not pushed to GitHub by default
 - `/turnlog-record --goal "..." --summary "..."` initializes turnlog and starts a session when needed before recording meaningful repo changes; use `--no-auto-init` or `--no-auto-start` only when explicitly desired
 - source entrypoint is `index.ts`
-- releases are built by `.github/workflows/release.yml`; run it manually with the version already in `package.json`, then it publishes platform packages, publishes `pi-turnlog`, and creates the Git tag only after all publication steps succeed
+- releases are built by `.github/workflows/release.yml`; run it manually with the version already in `package.json`, then it publishes platform packages, publishes `pi-turnlog`, verifies fresh installs on all four platforms, and creates the Git tag only after all checks succeed
 - the release workflow clones the public `ProbabilityEngineer/turnlog` repository; the first publication of the four new platform packages may require an `NPM_TOKEN` GitHub Actions secret because npm trusted publishers must be configured per existing package. After bootstrap, configure OIDC trusted publishing for each package and remove the token

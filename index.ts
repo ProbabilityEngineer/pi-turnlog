@@ -84,10 +84,9 @@ function resolveTurnlogBin(): string {
 function missingTurnlogMessage(bin = resolveTurnlogBin()): string {
   return [
     `turnlog CLI not found: ${bin}`,
-    "Install it with:",
-    "  cargo install turnlog",
-    "or set TURNLOG_BIN=/absolute/path/to/turnlog before starting Pi.",
-    "Supported npm installs bundle turnlog for macOS/Linux on arm64/x64; this is a PATH fallback message.",
+    "The optional platform package may be missing from Pi's npm lockfile.",
+    "Repair it with: npm install --prefix ~/.pi/agent/npm --include=optional",
+    "Alternatively set TURNLOG_BIN=/absolute/path/to/turnlog before starting Pi.",
   ].join("\n");
 }
 

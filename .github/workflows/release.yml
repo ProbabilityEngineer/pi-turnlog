@@ -81,7 +81,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish packages and tag release
+    name: Publish packages
     needs: build
     runs-on: ubuntu-latest
     steps:
@@ -131,6 +131,61 @@ jobs:
         run: |
           if [ -n "$NPM_TOKEN" ]; then export NODE_AUTH_TOKEN="$NPM_TOKEN"; fi
           npm publish --access public --provenance
+
+  smoke-install:
+    name: Install ${{ matrix.name }} from npm
+    needs: publish
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: darwin-arm64
+            runner: macos-14
+          - name: darwin-x64
+            runner: macos-15-intel
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+          - name: linux-x64
+            runner: ubuntu-24.04
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Verify fresh install includes executable
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          CLI_REF: ${{ inputs.cli_ref }}
+          PLATFORM: ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          dir="$(mktemp -d)"
+          # Registry propagation can lag behind a successful publish.
+          for attempt in 1 2 3 4 5 6; do
+            if npm install --prefix "$dir" --ignore-scripts --no-audit --no-fund "pi-turnlog@$VERSION"; then break; fi
+            if [ "$attempt" = 6 ]; then exit 1; fi
+            sleep 15
+          done
+          bin="$dir/node_modules/pi-turnlog-$PLATFORM/bin/turnlog"
+          test -x "$bin"
+          actual="$("$bin" --version)"
+          echo "$actual"
+          if [[ "$CLI_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            test "$actual" = "turnlog ${CLI_REF#v}"
+          fi
+
+  tag:
+    name: Tag verified release
+    needs: smoke-install
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Tag and push after successful publication
         env:
           VERSION: ${{ inputs.version }}
