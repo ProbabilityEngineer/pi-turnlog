@@ -1,6 +1,6 @@
 {
   "name": "pi-turnlog",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "private": false,
   "type": "module",
   "description": "Compact Pi extension for recording turnlog provenance with low prompt overhead.",
@@ -16,10 +16,10 @@
     "url": "https://github.com/ProbabilityEngineer/pi-turnlog/issues"
   },
   "optionalDependencies": {
-    "pi-turnlog-darwin-arm64": "0.4.9",
-    "pi-turnlog-darwin-x64": "0.4.9",
-    "pi-turnlog-linux-arm64": "0.4.9",
-    "pi-turnlog-linux-x64": "0.4.9"
+    "pi-turnlog-darwin-arm64": "0.4.10",
+    "pi-turnlog-darwin-x64": "0.4.10",
+    "pi-turnlog-linux-arm64": "0.4.10",
+    "pi-turnlog-linux-x64": "0.4.10"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
