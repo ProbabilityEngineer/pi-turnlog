@@ -6,11 +6,11 @@ on:
       version:
         description: "Release version already present in package.json"
         required: true
-        default: "0.4.8"
+        default: "0.4.9"
       cli_ref:
         description: "turnlog CLI git ref to build"
         required: true
-        default: "2476f635d1c476289b8049f19229b8bb802cc590" # turnlog v0.3.1
+        default: "v0.3.3" # turnlog v0.3.3
 
 permissions:
   contents: write
@@ -113,7 +113,10 @@ jobs:
         run: |
           test "$(node -p 'require("./package.json").version')" = "$VERSION"
           for package in packages/*/package.json; do test "$(node -p 'require("./'$package'").version')" = "$VERSION"; done
-          npm install --ignore-scripts --no-package-lock
+          # Platform packages are published immediately below; omit them while
+          # validating the main package so npm does not require them to already
+          # exist in the registry.
+          npm install --ignore-scripts --no-package-lock --omit=optional
           npm run lint
           npm pack --dry-run
       - name: Publish platform packages first

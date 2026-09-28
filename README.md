@@ -65,7 +65,7 @@ The four platform packages must exist on npm before their individual trusted-pub
 - **`pi-turnlog` is required:** it contains the TypeScript Pi extension, tool/slash-command registration and executable selection. It is not an obsolete duplicate of the Rust CLI.
 - The four platform packages contain only the matching Rust executable. They are optional dependencies filtered by npm's `os` and `cpu` fields; users install `pi-turnlog`, not all four manually.
 - **`x64` is Node/npm's name for x86-64 (also called `x86_64` or AMD64).** It matches `process.arch` and npm's `cpu` field. Rust uses `x86_64` in target triples. Keep the existing npm names; renaming would break resolution without changing the architecture.
-- npm extension versions and Rust CLI versions are separate: extension **0.4.8 bundles Turnlog 0.3.1**. Turnlog now defaults to Git-only; JJ is only enabled by explicit `TURNLOG_VCS=jj`.
+- npm extension versions and Rust CLI versions are separate: extension **0.4.9 bundles Turnlog 0.3.3**. Turnlog now defaults to Git-only; JJ is only enabled by explicit `TURNLOG_VCS=jj`.
 - Releases default to an immutable CLI commit rather than whatever happens to be on `main`. The workflow runs CLI regression tests on native targets before publishing; Linux arm64 is cross-built.
 
 ## Bundled CLI behavior
