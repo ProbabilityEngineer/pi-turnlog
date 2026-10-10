@@ -6,6 +6,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
 const ACTIONS = ["status", "init", "start", "record", "repair", "log", "grep", "show", "report", "auto"] as const;
+const STATUS_MAX_BYTES = 12 * 1024;
 const mutationQueues = new Map<string, Promise<void>>();
 const require = createRequire(import.meta.url);
 
@@ -135,7 +136,18 @@ async function runCli(args: string[], cwd?: string) {
   const stdout = result.stdout.trim();
   const stderr = result.stderr.trim();
   if (result.code !== 0) throw new Error(stderr || `turnlog ${args[0]} failed with exit code ${result.code}`);
-  return [stdout, stderr].filter(Boolean).join("\n") || `turnlog ${args[0]} ok`;
+  const output = [stdout, stderr].filter(Boolean).join("\n") || `turnlog ${args[0]} ok`;
+  return args[0] === "status" ? boundStatusOutput(output) : output;
+}
+
+export function boundStatusOutput(value: string): string {
+  if (Buffer.byteLength(value, "utf8") <= STATUS_MAX_BYTES) return value;
+  const notice = "\nstatus output truncated by pi-turnlog; use `turnlog status --full` outside Pi for full output.";
+  const budget = STATUS_MAX_BYTES - Buffer.byteLength(notice, "utf8");
+  let end = Math.max(0, budget);
+  while (end > 0 && Buffer.byteLength(value.slice(0, end), "utf8") > budget) end--;
+  while (end > 0 && /[\uD800-\uDBFF]$/.test(value.slice(0, end))) end--;
+  return `${value.slice(0, end)}${notice}`;
 }
 
 async function notifyResult(ctx: any, label: string, args: string[]) {

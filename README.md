@@ -38,7 +38,7 @@ pi -e ./index.ts
 
 The slash-command surface is intentionally compact:
 
-- `/turnlog-status [--cwd /path/to/repo]` — show current turnlog/VCS status.
+- `/turnlog-status [--cwd /path/to/repo]` — show bounded current turnlog/VCS status.
 - `/turnlog-start --goal "..." [--ticket ...] [--cwd /path/to/repo]` — initialize `.turnlog/` if needed and start a new session.
 - `/turnlog-record [--summary "..."] [--auto-init] [--auto-start] [--goal "..."] [--cwd /path/to/repo]` — record the latest assistant turn only when repository changes make it meaningful.
 - `/turnlog-repair [--cwd /path/to/repo]` — rebuild a damaged index from canonical session and turn records.
