@@ -48,6 +48,12 @@ The slash-command surface is intentionally compact:
 
 ## Tool
 
+Model-visible Turnlog results (including errors and history/report actions) are
+limited independently to 12 KiB. Oversized status output retains essential
+status fields and up to 20 sample paths; a notice explains truncation.
+Run `turnlog status --full` in a terminal for complete status output.
+Full payloads are not attached or retained in model-visible details.
+
 One compact model-visible tool:
 
 ```text

@@ -92,7 +92,7 @@ function missingTurnlogMessage(bin = resolveTurnlogBin()): string {
 }
 
 function text(content: string, details: Record<string, unknown> = {}) {
-  return { content: [{ type: "text" as const, text: content }], details };
+  return { content: [{ type: "text" as const, text: boundStatusOutput(content) }], details };
 }
 
 function targetCwd(cwd?: string, requested?: string): string | undefined {
@@ -141,9 +141,20 @@ async function runCli(args: string[], cwd?: string) {
 }
 
 export function boundStatusOutput(value: string): string {
-  if (Buffer.byteLength(value, "utf8") <= STATUS_MAX_BYTES) return value;
-  const notice = "\nstatus output truncated by pi-turnlog; use `turnlog status --full` outside Pi for full output.";
+  if (Buffer.byteLength(value, "utf8") <= STATUS_MAX_BYTES && value.split("\n").length <= 100) return value;
+  const isStatus = /^turnlog: /m.test(value);
+  const notice = isStatus
+    ? "\nstatus output truncated by pi-turnlog; use `turnlog status --full` outside Pi for full output."
+    : "\noutput truncated by pi-turnlog; run the corresponding turnlog CLI command outside Pi for full output.";
   const budget = STATUS_MAX_BYTES - Buffer.byteLength(notice, "utf8");
+  const lines = value.split(/\r?\n/);
+  const essential = lines.filter(line => /^(turnlog:|current session:|last turn:|vcs:|git branch:|git head:|dirty:|changed files:|omitted paths:|jj )/.test(line));
+  const selected = essential.length ? [...essential, ...lines.filter(line => line.startsWith("  - ")).slice(0, 20)] : lines.slice(0, 99);
+  value = selected.map(line => {
+    let end = Math.min(line.length, 512);
+    while (end > 0 && (Buffer.byteLength(line.slice(0, end)) > 512 || /[\uD800-\uDBFF]$/.test(line.slice(0, end)))) end--;
+    return line.slice(0, end) + (end < line.length ? "…" : "");
+  }).join("\n");
   let end = Math.max(0, budget);
   while (end > 0 && Buffer.byteLength(value.slice(0, end), "utf8") > budget) end--;
   while (end > 0 && /[\uD800-\uDBFF]$/.test(value.slice(0, end))) end--;
