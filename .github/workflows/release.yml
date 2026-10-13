@@ -6,11 +6,11 @@ on:
       version:
         description: "Release version already present in package.json"
         required: true
-        default: "0.4.10"
+        default: "0.4.11"
       cli_ref:
         description: "turnlog CLI git ref to build"
         required: true
-        default: "v0.3.3" # turnlog v0.3.3
+        default: "v0.3.4" # turnlog v0.3.4
 
 permissions:
   contents: write
