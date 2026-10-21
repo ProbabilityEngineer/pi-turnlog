@@ -5,6 +5,17 @@ import { mkdtemp, writeFile, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+test("registered guidance makes Turnlog opt-in, not routine finalization", () => {
+  let tool;
+  extension({on() {}, registerCommand() {}, registerTool(value) { tool = value; }});
+  assert.match(tool.promptSnippet, /only when the user explicitly requests/);
+  const guidelines = tool.promptGuidelines.join("\n");
+  assert.match(guidelines, /Routine edits, renames, tests and commits do not require/);
+  assert.match(guidelines, /a read request does not authorize/);
+  assert.match(guidelines, /not a commit or push prerequisite/);
+  assert.doesNotMatch(guidelines, /Use turnlog proactively|Before the final commit\/push/);
+});
+
 test("real tool boundary caps oversized stdout and stderr without hidden payloads", async () => {
   const dir = await mkdtemp(join(tmpdir(), "turnlog-tool-test-"));
   const old = process.env.TURNLOG_BIN;

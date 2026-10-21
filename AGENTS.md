@@ -19,7 +19,7 @@
 - At the start of substantial work, run `clu ready`, then use `clu claim --context` or claim the specifically requested task; read inherited context before editing.
 - Put newly discovered work, notes, and dependencies in `clu`, not Markdown todo lists.
 - Close completed work in `clu` after validation; leave incomplete or blocked work represented there.
-- Use Turnlog separately for decisions, experiments, rationale, and lessons learned.
+- Turnlog is opt-in: use it only when explicitly requested, not as a routine edit or commit prerequisite.
 
 ## Local state
 

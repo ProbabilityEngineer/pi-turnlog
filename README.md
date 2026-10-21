@@ -60,7 +60,16 @@ One compact model-visible tool:
 turnlog action: status/init/start/record/repair/log/grep/show/report/auto [cwd=/path/to/repo]
 ```
 
-Use the tool when the user wants durable provenance, handoff records, or a session report. Agents should also use it proactively for meaningful repository work: code/docs/ticket changes, commits/pushes, ticket closures, multi-repo work, validation, and handoff context. Do not record routine chat-only turns. Before the final commit/push for a coherent repo change, record what changed, why, validation performed, tickets touched, and intended VCS finalization; if `.turnlog/` is tracked in that repo, include those changes in the same commit. Do not record again after push unless committing that follow-up provenance record too. If a record attempt finds turnlog uninitialized, initialize it; auto-start a session for meaningful repo work unless the user forbids persistence. If the CLI reports a malformed or incomplete index, use `turnlog action=repair` or `/turnlog-repair` before attempting another write. Before substantial continuation work in an initialized repo, start with status and retrieve history with `log`, `grep`, or `show` only when prior decisions, validation, or handoff context is relevant.
+Turnlog is **opt-in**. Use it only when the user explicitly requests provenance,
+recovery/history inspection or a session report. Routine edits, renames, tests,
+commits and pushes do not require Turnlog calls or records; Git history and a
+concise explanation are sufficient.
+
+For requested history inspection, use `status`, `log`, `grep` or `show` as needed.
+A read request does not authorize initialization, session creation, repair or
+recording. Perform those writes, or enable auto-recording, only within explicit
+user authorization. An explicitly requested record can still initialize/start
+through the documented command options; auto-recording remains off by default.
 
 ## Release bootstrap
 
