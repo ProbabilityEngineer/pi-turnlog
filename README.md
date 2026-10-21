@@ -1,6 +1,6 @@
 # pi-turnlog
 
-> One of my diet context engineering and workflow extensions. Explore the complete collection: <https://www.npmjs.com/~probabilityengineer>
+> One of my diet context engineering and workflow extensions. Explore the complete collection: <https://www.npmjs.com/~probabilityengineer>.
 
 Pi extension layer for `turnlog`.
 
