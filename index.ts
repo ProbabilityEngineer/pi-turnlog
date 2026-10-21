@@ -1,11 +1,9 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { readFile, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
-const ACTIONS = ["status", "init", "start", "record", "repair", "log", "grep", "show", "report", "auto"] as const;
 const STATUS_MAX_BYTES = 12 * 1024;
 const mutationQueues = new Map<string, Promise<void>>();
 const require = createRequire(import.meta.url);
@@ -21,24 +19,6 @@ function bundledTurnlogBin(): string | undefined {
   if (!packageName) return undefined;
   try { return require.resolve(`${packageName}/bin/turnlog`); } catch { return undefined; }
 }
-type TurnlogAction = (typeof ACTIONS)[number];
-
-type ToolParams = {
-  action: TurnlogAction;
-  goal?: string;
-  ticket?: string;
-  summary?: string;
-  id?: string;
-  pattern?: string;
-  session?: string;
-  changed?: string;
-  enabled?: boolean;
-  autoInit?: boolean;
-  autoStart?: boolean;
-  cwd?: string;
-};
-
-type ToolCtx = { cwd?: string; ui?: { notify?: (message: string, level?: "info" | "warning" | "error") => void } };
 
 function parseArgs(input: string): string[] {
   const args: string[] = [];
@@ -91,9 +71,7 @@ function missingTurnlogMessage(bin = resolveTurnlogBin()): string {
   ].join("\n");
 }
 
-function text(content: string, details: Record<string, unknown> = {}) {
-  return { content: [{ type: "text" as const, text: boundStatusOutput(content) }], details };
-}
+
 
 function targetCwd(cwd?: string, requested?: string): string | undefined {
   if (!requested?.trim()) return cwd;
@@ -163,7 +141,7 @@ export function boundStatusOutput(value: string): string {
 
 async function notifyResult(ctx: any, label: string, args: string[]) {
   const stdout = await runCli(args, ctx.cwd);
-  ctx.ui.notify(`${label}:\n${stdout}`, "info");
+  ctx.ui.notify(boundStatusOutput(`${label}:\n${stdout}`), "info");
   return stdout;
 }
 
@@ -280,65 +258,7 @@ async function recordIfMeaningful(cwd: string | undefined, summary: string, opti
   }
 }
 
-async function execute(params: ToolParams, cwd?: string, lastAssistantSummary = "", setAuto?: (enabled: boolean) => boolean) {
-  if (params.action === "status") return runCli(["status"], cwd);
-  if (params.action === "init") return serializeMutation(cwd, async () => {
-    const result = await initTurnlog(cwd);
-    return [result.output, ...(result.ignored ? ["added .turnlog/ to .gitignore"] : [])].join("\n");
-  });
-  if (params.action === "start") return serializeMutation(cwd, async () => {
-    const goal = params.goal?.trim();
-    if (!goal) throw new Error("goal is required for turnlog start");
-    await ensureInitialized(cwd);
-    const args = ["start", "--goal", goal];
-    if (params.ticket?.trim()) args.push("--ticket", params.ticket.trim());
-    return runCli(args, cwd);
-  });
-  if (params.action === "record") return serializeMutation(cwd, async () => {
-    const summary = params.summary?.trim() || lastAssistantSummary;
-    if (!summary.trim()) return "No assistant summary available; nothing recorded.";
-    const initialized = params.autoInit === false ? false : await ensureInitialized(cwd);
-    if (!(await hasMeaningfulTurn(cwd))) return [
-      ...(initialized ? ["turnlog initialized"] : []),
-      "No meaningful repository change detected; nothing recorded.",
-    ].join("\n");
-    const started = params.autoStart === false ? undefined : await ensureActiveSession(cwd, params.goal, params.ticket);
-    const recorded = await runCli(["record", "--summary", summary], cwd);
-    return [
-      ...(initialized ? ["turnlog initialized"] : []),
-      ...(started ? [`turnlog session started:\n${started}`] : []),
-      recorded,
-    ].join("\n");
-  });
-  if (params.action === "repair") return serializeMutation(cwd, () => runCli(["repair"], cwd));
-  if (params.action === "log") {
-    const args = ["log"];
-    if (params.session?.trim()) args.push("--session", params.session.trim());
-    if (params.ticket?.trim()) args.push("--ticket", params.ticket.trim());
-    if (params.pattern?.trim()) args.push("--grep", params.pattern.trim());
-    if (params.changed?.trim()) args.push("--changed", params.changed.trim());
-    return runCli(args, cwd);
-  }
-  if (params.action === "grep") {
-    const pattern = params.pattern?.trim();
-    if (!pattern) throw new Error("pattern is required for turnlog grep");
-    return runCli(["grep", pattern], cwd);
-  }
-  if (params.action === "show") {
-    if (!params.id?.trim()) throw new Error("id is required for turnlog show");
-    return runCli(["show", params.id.trim()], cwd);
-  }
-  if (params.action === "report") return serializeMutation(cwd, () => {
-    if (!params.id?.trim()) throw new Error("id is required for turnlog report");
-    return runCli(["report", params.id.trim(), "--stdout"], cwd);
-  });
-  if (params.action === "auto") {
-    if (!setAuto) throw new Error("auto control unavailable");
-    const enabled = setAuto(params.enabled ?? true);
-    return `turnlog auto-record ${enabled ? "enabled" : "disabled"}`;
-  }
-  return "Unknown turnlog action";
-}
+
 
 function startArgs(raw: string): { goal?: string; ticket?: string; cwd?: string } {
   const args = parseArgs(raw);
@@ -410,6 +330,12 @@ export default function (pi: ExtensionAPI) {
   let lastAssistantSummary = "";
   const recordedTurnKeys = new Set<string>();
 
+  pi.on("session_start", async () => {
+    autoRecordEnabled = false;
+    lastAssistantSummary = "";
+    recordedTurnKeys.clear();
+  });
+
   pi.on("turn_end", async (event) => {
     const summary = summarizeText(messageText((event as any).message));
     if (summary) lastAssistantSummary = summary;
@@ -425,14 +351,18 @@ export default function (pi: ExtensionAPI) {
 
     const messageKey = String(message.id ?? (event as any).turnIndex ?? summary);
     if (recordedTurnKeys.has(messageKey)) return;
-    recordedTurnKeys.add(messageKey);
-
     try {
-      const stdout = await serializeMutation(ctx.cwd, () => recordIfMeaningful(ctx.cwd, summary, {
-        autoInit: true,
-        autoStart: true,
-        goal: "Automatic Pi turn provenance",
-      }));
+      const stdout = await serializeMutation(ctx.cwd, async () => {
+        if (!autoRecordEnabled || recordedTurnKeys.has(messageKey)) return "";
+        const output = await recordIfMeaningful(ctx.cwd, summary, {
+          autoInit: true,
+          autoStart: true,
+          goal: "Automatic Pi turn provenance",
+        });
+        recordedTurnKeys.add(messageKey);
+        return output;
+      });
+      if (!stdout) return;
       if (stdout.startsWith("No meaningful repository change detected")) return;
       ctx.ui.notify(`turnlog auto-record:\n${stdout}`, "info");
     } catch (error) {
@@ -534,39 +464,28 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  pi.registerTool({
-    name: "turnlog",
-    label: "Turnlog",
-    description: "Compact turn/session provenance tool: status/init/start/record/repair/log/grep/show/report/auto.",
-    promptSnippet: "Turnlog is opt-in: use it only when the user explicitly requests provenance, recovery/history inspection, or a session report.",
-    promptGuidelines: [
-      "Use Turnlog only when the user explicitly requests provenance, recovery/history inspection, or a session report. Routine edits, renames, tests and commits do not require Turnlog calls or records.",
-      "For requested history inspection, use status/log/grep/show as needed; a read request does not authorize initialization, session creation, repair or recording.",
-      "Initialize, start, record, repair or enable automatic recording only within explicit user authorization for those writes. Never enable auto-recording merely because repository files changed.",
-      "Turnlog is not a commit or push prerequisite. Git history and a concise explanation are sufficient for routine changes.",
-      "When the repository being changed is not Pi's current cwd, pass cwd with the target repo path so turnlog writes there.",
-    ],
-    parameters: Type.Object({
-      action: Type.String({ enum: [...ACTIONS] as string[] }),
-      cwd: Type.Optional(Type.String({ description: "Directory whose repository turnlog should be used instead of Pi's current cwd" })),
-      goal: Type.Optional(Type.String()),
-      ticket: Type.Optional(Type.String()),
-      summary: Type.Optional(Type.String()),
-      id: Type.Optional(Type.String()),
-      pattern: Type.Optional(Type.String({ description: "Text for grep, or a log --grep filter" })),
-      session: Type.Optional(Type.String({ description: "Session ID for a log filter" })),
-      changed: Type.Optional(Type.String({ description: "Changed-file substring for a log filter" })),
-      enabled: Type.Optional(Type.Boolean()),
-      autoInit: Type.Optional(Type.Boolean()),
-      autoStart: Type.Optional(Type.Boolean()),
-    }),
-    async execute(_id: string, params: ToolParams, _signal: AbortSignal, _update: unknown, ctx: ToolCtx) {
-      try {
-        const output = await execute(params, targetCwd(ctx.cwd, params.cwd), lastAssistantSummary, (enabled) => (autoRecordEnabled = enabled));
-        return text(output, { action: params.action });
-      } catch (error) {
-        return text(error instanceof Error ? error.message : String(error), { code: 2 });
-      }
+  pi.registerCommand("turnlog-report", {
+    description: "Generate a report for a session",
+    handler: async (args, ctx) => {
+      const parsed = historyArgs(args);
+      if (!parsed.id) throw new Error("Usage: /turnlog-report <session-id> [--cwd /path/to/repo]");
+      const cwd = targetCwd(ctx.cwd, parsed.cwd);
+      await serializeMutation(cwd, () => notifyResult({ ...ctx, cwd }, "turnlog report", ["report", parsed.id!, "--stdout"]));
     },
-  } as any);
+  });
+
+  pi.registerCommand("turnlog-auto", {
+    description: "Control automatic recording: on, off, or status",
+    handler: async (args, ctx) => {
+      const mode = args.trim() || "status";
+      if (!["on", "off", "status"].includes(mode)) {
+        throw new Error("Usage: /turnlog-auto on|off|status");
+      }
+      if (mode !== "status") autoRecordEnabled = mode === "on";
+      ctx.ui.notify(
+        `turnlog auto-record ${autoRecordEnabled ? "enabled" : "disabled"} for this session (resets on reload/session change)`,
+        "info",
+      );
+    },
+  });
 }

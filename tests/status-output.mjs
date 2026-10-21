@@ -1,19 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import extension, { boundStatusOutput } from "../index.ts";
-import { mkdtemp, writeFile, chmod, rm } from "node:fs/promises";
+import { mkdtemp, writeFile, readFile, chmod, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-test("registered guidance makes Turnlog opt-in, not routine finalization", () => {
-  let tool;
-  extension({on() {}, registerCommand() {}, registerTool(value) { tool = value; }});
-  assert.match(tool.promptSnippet, /only when the user explicitly requests/);
-  const guidelines = tool.promptGuidelines.join("\n");
-  assert.match(guidelines, /Routine edits, renames, tests and commits do not require/);
-  assert.match(guidelines, /a read request does not authorize/);
-  assert.match(guidelines, /not a commit or push prerequisite/);
-  assert.doesNotMatch(guidelines, /Use turnlog proactively|Before the final commit\/push/);
+test("registers user commands without model tools", () => {
+  const commands = {};
+  extension({on() {}, registerCommand(name, value) { commands[name] = value; },
+    registerTool() { assert.fail("must not register a model tool"); }});
+  for (const name of ["auto", "status", "start", "record", "repair", "log", "grep", "show", "report"])
+    assert.ok(commands[`turnlog-${name}`]);
 });
 
 test("real tool boundary caps oversized stdout and stderr without hidden payloads", async () => {
@@ -24,14 +21,14 @@ test("real tool boundary caps oversized stdout and stderr without hidden payload
     await writeFile(executable, `#!/bin/sh\nprintf 'turnlog: initialized\\ncurrent session: sess\\nlast turn: turn\\nvcs: git\\ngit branch: main\\ngit head: abc\\ndirty: true\\nchanged files: 30001\\n'\ni=0; while [ "$i" -lt 30001 ]; do printf '  - path-%s\\n' "$i"; i=$((i+1)); done\nprintf '%20000s' warning >&2\n`);
     await chmod(executable, 0o755);
     process.env.TURNLOG_BIN = executable;
-    let tool;
-    extension({on() {}, registerCommand() {}, registerTool(value) { tool = value; }});
+    const commands = {};
+    extension({on() {}, registerCommand(name, value) { commands[name] = value; }});
     for (const action of ["status", "log", "grep", "show", "report"]) {
-      const result = await tool.execute("test", {action, id: "fixture", pattern: "fixture"}, undefined, undefined, {cwd: dir});
-      assert.ok(Buffer.byteLength(JSON.stringify(result)) < 13000);
-      assert.ok(Buffer.byteLength(result.content[0].text) <= 12288);
-      assert.ok(result.content[0].text.includes("git head: abc"));
-      assert.ok(result.content[0].text.includes("truncated"));
+      let result;
+      await commands[`turnlog-${action}`].handler("fixture", {cwd: dir, ui: {notify(value) { result = value; }}});
+      assert.ok(Buffer.byteLength(result) < 13000);
+      assert.ok(result.includes("git head: abc"));
+      assert.ok(result.includes("truncated"));
     }
   } finally {
     if (old === undefined) delete process.env.TURNLOG_BIN; else process.env.TURNLOG_BIN = old;
@@ -52,11 +49,52 @@ test("bounded UTF-8 status preserves essential fields after huge summaries", () 
   assert.ok(!output.includes("\uFFFD"));
 });
 
-test("ordinary output is unchanged and every tool action has a final safeguard", async () => {
+test("ordinary output is unchanged", async () => {
   assert.equal(boundStatusOutput("turnlog: initialized\nvcs: none"), "turnlog: initialized\nvcs: none");
-  let tool;
-  extension({on() {}, registerCommand() {}, registerTool(value) { tool = value; }});
-  const result = await tool.execute("test", {action: "show", id: "x".repeat(30000)}, undefined, undefined, {cwd: "/nonexistent-turnlog-test-directory"});
-  assert.ok(Buffer.byteLength(result.content[0].text) <= 12288);
-  assert.deepEqual(result.details, {code: 2});
+});
+
+test("auto control defaults off, rejects invalid input, and resets on session change", async () => {
+  const commands = {}, hooks = {};
+  extension({on(name, fn) { hooks[name] = fn; }, registerCommand(name, value) { commands[name] = value; }});
+  let output;
+  const ctx = {cwd: "/nonexistent-turnlog-test-directory", ui: {notify(value) { output = value; }}};
+  await commands["turnlog-auto"].handler("", ctx);
+  assert.match(output, /disabled/);
+  await hooks.message_end({message: {role: "assistant", content: [{type: "text", text: "hello"}]}}, ctx);
+  assert.match(output, /disabled/);
+  await commands["turnlog-auto"].handler("on", ctx);
+  assert.match(output, /enabled/);
+  await assert.rejects(commands["turnlog-auto"].handler("maybe", ctx), /Usage/);
+  await hooks.session_start();
+  await commands["turnlog-auto"].handler("status", ctx);
+  assert.match(output, /disabled/);
+});
+
+test("enabled hook records without model calls, deduplicates, and stops when disabled", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "turnlog-hooks-"));
+  const old = process.env.TURNLOG_BIN;
+  try {
+    const executable = join(dir, "fixture");
+    await writeFile(executable, `#!/bin/sh
+if [ "$1" = record ]; then echo recorded >> calls; echo recorded; else
+printf 'turnlog: initialized\\ncurrent session: sess\\ndirty: true\\n'
+fi
+`);
+    await chmod(executable, 0o755);
+    process.env.TURNLOG_BIN = executable;
+    const commands = {}, hooks = {};
+    extension({on(name, fn) { hooks[name] = fn; }, registerCommand(name, value) { commands[name] = value; }});
+    const ctx = {cwd: dir, ui: {notify() {}}};
+    const event = {message: {id: "one", role: "assistant", content: [{type: "text", text: "Updated code"}]}};
+    await commands["turnlog-auto"].handler("on", ctx);
+    await hooks.message_end(event, ctx);
+    await hooks.message_end(event, ctx);
+    assert.equal(await readFile(join(dir, "calls"), "utf8"), "recorded\n");
+    await commands["turnlog-auto"].handler("off", ctx);
+    await hooks.message_end({...event, message: {...event.message, id: "two"}}, ctx);
+    assert.equal(await readFile(join(dir, "calls"), "utf8"), "recorded\n");
+  } finally {
+    if (old === undefined) delete process.env.TURNLOG_BIN; else process.env.TURNLOG_BIN = old;
+    await rm(dir, {recursive: true});
+  }
 });

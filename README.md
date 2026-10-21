@@ -46,30 +46,24 @@ The slash-command surface is intentionally compact:
 - `/turnlog-grep "TEXT" [--cwd /path/to/repo]` — search prior sessions and turns.
 - `/turnlog-show <session-or-turn-id> [--cwd /path/to/repo]` — inspect one prior record.
 
-## Tool
+## User-controlled recording
 
-Model-visible Turnlog results (including errors and history/report actions) are
-limited independently to 12 KiB. Oversized status output retains essential
-status fields and up to 20 sample paths; a notice explains truncation.
-Run `turnlog status --full` in a terminal for complete status output.
-Full payloads are not attached or retained in model-visible details.
+No model-visible tool or prompt guidance is registered. Use slash commands:
+`/turnlog-auto on`, `/turnlog-auto off`, and `/turnlog-auto status`.
+Automatic recording is off by default and resets on extension reload or session
+change. Enabling it authorizes initialization and session creation in Pi's current
+directory when the recording hook runs. Disabling stops queued work that has not
+started; an already-running CLI operation can finish.
 
-One compact model-visible tool:
+Once enabled, assistant `message_end` events trigger recording in code, without
+model tool calls or additional model inference. Summaries are bounded excerpts of
+existing assistant text. This is message-level capture, not one record per user
+request. Duplicate suppression is in-memory; failed writes are surfaced and may
+be retried on a repeated event, but durable retries/crash recovery are not provided.
 
-```text
-turnlog action: status/init/start/record/repair/log/grep/show/report/auto [cwd=/path/to/repo]
-```
-
-Turnlog is **opt-in**. Use it only when the user explicitly requests provenance,
-recovery/history inspection or a session report. Routine edits, renames, tests,
-commits and pushes do not require Turnlog calls or records; Git history and a
-concise explanation are sufficient.
-
-For requested history inspection, use `status`, `log`, `grep` or `show` as needed.
-A read request does not authorize initialization, session creation, repair or
-recording. Perform those writes, or enable auto-recording, only within explicit
-user authorization. An explicitly requested record can still initialize/start
-through the documented command options; auto-recording remains off by default.
+Existing slash commands remain available, including manual `/turnlog-record`.
+Use `/turnlog-report <session-id> [--cwd /path/to/repo]` for a report.
+History/status command notifications are bounded to 12 KiB.
 
 ## Release bootstrap
 
@@ -77,7 +71,7 @@ The four platform packages must exist on npm before their individual trusted-pub
 
 ## Why there are five packages
 
-- **`pi-turnlog` is required:** it contains the TypeScript Pi extension, tool/slash-command registration and executable selection. It is not an obsolete duplicate of the Rust CLI.
+- **`pi-turnlog` is required:** it contains the TypeScript Pi extension, slash commands, lifecycle hooks and executable selection.
 - The four platform packages contain only the matching Rust executable. They are optional dependencies filtered by npm's `os` and `cpu` fields; users install `pi-turnlog`, not all four manually.
 - **`x64` is Node/npm's name for x86-64 (also called `x86_64` or AMD64).** It matches `process.arch` and npm's `cpu` field. Rust uses `x86_64` in target triples. Keep the existing npm names; renaming would break resolution without changing the architecture.
 - npm extension versions and Rust CLI versions are separate: extension **0.4.9 bundles Turnlog 0.3.3**. Turnlog now defaults to Git-only; JJ is only enabled by explicit `TURNLOG_VCS=jj`.
@@ -97,7 +91,7 @@ missing, repair the shared npm installation with
 fresh Pi npm directory). The release workflow verifies clean npm installs
 and bundled CLI versions on all four supported platforms before tagging.
 
-If the executable is missing, commands and tools print an explicit install hint:
+If the executable is missing, commands print an explicit install hint:
 
 ```bash
 cargo install turnlog
@@ -114,8 +108,8 @@ TURNLOG_BIN=/absolute/path/to/turnlog pi
 - quoted arguments are supported
 - `TURNLOG_BIN` overrides the executable path
 - stdout/stderr are surfaced in Pi
-- auto-recording is off by default and can be enabled with `turnlog action=auto enabled=true`
-- pass `cwd` (tool) or `--cwd`/`-C` (commands) when Pi is running in one directory but the agent is changing another repository
+- auto-recording is off by default and can be enabled with `/turnlog-auto on`
+- pass `--cwd`/`-C` to commands when targeting another repository; automatic recording uses Pi's current directory
 - auto-record automatically initializes turnlog and starts a conservative session when meaningful repository changes exist in Pi's current cwd
 - auto-record and `/turnlog-record` skip chat-only turns when no repository change is detected
 - mutating calls are queued per repository within a Pi process; the CLI provides the cross-process advisory lock
